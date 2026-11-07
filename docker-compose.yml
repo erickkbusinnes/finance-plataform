@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17.6-bookworm
+    environment:
+      POSTGRES_USER: clara
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clara_local}
+      POSTGRES_DB: clara
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - clara_pg:/var/lib/postgresql/data
+      - ./database/init-test.sql:/docker-entrypoint-initdb.d/10-test.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U clara -d clara']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  clara_pg:

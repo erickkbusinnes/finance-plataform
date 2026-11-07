@@ -1,0 +1,29 @@
+{
+  "name": "clara-finance",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.21"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web \"npm run dev -w @clara/api\" \"npm run dev -w @clara/web\"",
+    "db:migrate": "npm run db:migrate -w @clara/api",
+    "build": "npm run build -w @clara/api && npm run build -w @clara/web && node scripts/sitemap.mjs",
+    "typecheck": "tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json",
+    "test": "npm run test -w @clara/api",
+    "test:e2e": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.56.1",
+    "concurrently": "^9.2.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3"
+  },
+  "type": "module"
+}

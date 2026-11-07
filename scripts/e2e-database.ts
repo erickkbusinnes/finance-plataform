@@ -1,0 +1,10 @@
+import pg from 'pg';
+const schema = process.env.E2E_SCHEMA;
+if (!schema || !/^e2e_[a-f0-9]{32}$/.test(schema)) throw new Error('Schema de teste inválido');
+const p = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+await p.query(`CREATE SCHEMA "${schema}"`);
+await p.end();
+const { migrate } = await import('../apps/api/src/migrate.js');
+const { pool } = await import('../apps/api/src/db.js');
+await migrate();
+await pool.end();

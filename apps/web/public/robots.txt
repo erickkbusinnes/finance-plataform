@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /redefinir-senha
+Disallow: /verificar-email
