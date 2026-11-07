@@ -11,7 +11,15 @@ export const today = () =>
     day: '2-digit',
   }).format(new Date());
 export type ModalType =
-  'account' | 'category' | 'transaction' | 'workspace' | 'budget' | 'goal' | 'contribution' | null;
+  | 'refund'
+  | 'account'
+  | 'category'
+  | 'transaction'
+  | 'workspace'
+  | 'budget'
+  | 'goal'
+  | 'contribution'
+  | null;
 export function FinanceForm({
   type,
   wid,
@@ -33,10 +41,11 @@ export function FinanceForm({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [kind, setKind] = useState(transaction?.kind || 'expense');
+  const [kind, setKind] = useState(type === 'refund' ? 'refund' : transaction?.kind || 'expense');
   const key = useRef(crypto.randomUUID());
   const base = `/workspaces/${wid}`;
   const title = {
+    refund: 'Reembolsar despesa',
     account: 'Adicionar conta',
     category: 'Nova categoria',
     transaction: transaction ? 'Editar movimentação' : 'Nova movimentação',
@@ -72,6 +81,7 @@ export function FinanceForm({
               name: val(d, 'name'),
               kind: val(d, 'kind'),
               color: val(d, 'color'),
+              parentId: val(d, 'parentId') || null,
             });
           if (type === 'goal')
             return post(base + '/goals', {
@@ -91,18 +101,33 @@ export function FinanceForm({
               month: val(d, 'month'),
               limitCents: parseMoney(val(d, 'amount')),
             });
-          if (type === 'transaction') {
+          if (type === 'transaction' || type === 'refund') {
             const body = {
               description: val(d, 'description'),
+              refundOf:
+                kind === 'refund'
+                  ? type === 'refund'
+                    ? transaction!.id
+                    : transaction!.refundOf
+                  : null,
+              tags: val(d, 'tags')
+                .split(',')
+                .map((t) => t.trim())
+                .filter(Boolean),
               kind,
               amountCents: parseMoney(val(d, 'amount')),
               date: val(d, 'date'),
               accountId: val(d, 'accountId'),
               destinationAccountId: kind === 'transfer' ? val(d, 'destinationAccountId') : null,
-              categoryId: kind === 'transfer' ? null : val(d, 'categoryId') || null,
+              categoryId:
+                kind === 'refund'
+                  ? transaction!.categoryId
+                  : kind === 'transfer'
+                    ? null
+                    : val(d, 'categoryId') || null,
               notes: val(d, 'notes'),
             };
-            if (transaction)
+            if (transaction && type !== 'refund')
               return api(base + `/transactions/${transaction.id}`, {
                 method: 'PUT',
                 body: JSON.stringify({ ...body, version: transaction.version }),
@@ -181,15 +206,30 @@ export function FinanceForm({
                 <option value="income">Receita</option>
               </select>
             </Field>
+            <Field label="Categoria principal">
+              <select name="parentId">
+                <option value="">Categoria principal (sem mãe)</option>
+                {categories
+                  .filter((c) => !c.archivedAt && !c.parentId)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.kind === 'expense' ? 'Despesa' : 'Receita'})
+                    </option>
+                  ))}
+              </select>
+            </Field>
             <Field label="Cor">
               <input type="color" name="color" defaultValue="#10b981" />
             </Field>
           </>
         )}
-        {type === 'transaction' && (
+        {(type === 'transaction' || type === 'refund') && (
           <>
             <div className="type-tabs" role="group" aria-label="Tipo da movimentação">
-              {(['expense', 'income', 'transfer'] as const).map((k) => (
+              {kind === 'refund' ? (
+                <span className="badge">Reembolso vinculado à despesa</span>
+              ) : null}
+              {(kind === 'refund' ? [] : (['expense', 'income', 'transfer'] as const)).map((k) => (
                 <button
                   className={kind === k ? 'active' : ''}
                   type="button"
@@ -204,7 +244,11 @@ export function FinanceForm({
               <input
                 name="description"
                 placeholder="O que aconteceu?"
-                defaultValue={transaction?.description}
+                defaultValue={
+                  type === 'refund'
+                    ? 'Reembolso: ' + transaction?.description
+                    : transaction?.description
+                }
                 required
                 minLength={2}
                 maxLength={200}
@@ -224,21 +268,39 @@ export function FinanceForm({
                 <input
                   name="date"
                   type="date"
-                  defaultValue={transaction?.date || today()}
+                  defaultValue={type === 'refund' ? today() : transaction?.date || today()}
                   required
                 />
               </Field>
             </div>
             <Field label={kind === 'transfer' ? 'Conta de origem' : 'Conta'}>
-              <select name="accountId" defaultValue={transaction?.accountId || ''} required>
+              <select
+                name="accountId"
+                defaultValue={
+                  transaction &&
+                  (type === 'transaction' ||
+                    accounts.some((a) => a.id === transaction.accountId && !a.archivedAt))
+                    ? transaction.accountId
+                    : ''
+                }
+                required
+              >
                 <option value="" disabled>
                   Selecione uma conta
                 </option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
+                {accounts
+                  .filter(
+                    (a) =>
+                      !a.archivedAt ||
+                      (type === 'transaction' &&
+                        (a.id === transaction?.accountId ||
+                          a.id === transaction?.destinationAccountId)),
+                  )
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
               </select>
             </Field>
             {kind === 'transfer' ? (
@@ -251,19 +313,34 @@ export function FinanceForm({
                   <option value="" disabled>
                     Selecione outra conta
                   </option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
+                  {accounts
+                    .filter(
+                      (a) =>
+                        !a.archivedAt ||
+                        a.id === transaction?.accountId ||
+                        a.id === transaction?.destinationAccountId,
+                    )
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
                 </select>
               </Field>
             ) : (
               <Field label="Categoria">
-                <select name="categoryId" defaultValue={transaction?.categoryId || ''}>
+                <select
+                  name="categoryId"
+                  disabled={kind === 'refund'}
+                  defaultValue={transaction?.categoryId || ''}
+                >
                   <option value="">Sem categoria</option>
                   {categories
-                    .filter((c) => c.kind === kind)
+                    .filter(
+                      (c) =>
+                        c.kind === (kind === 'refund' ? 'expense' : kind) &&
+                        (!c.archivedAt || c.id === transaction?.categoryId),
+                    )
                     .map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
@@ -272,6 +349,14 @@ export function FinanceForm({
                 </select>
               </Field>
             )}
+            <Field label="Tags (separadas por vírgula)">
+              <input
+                name="tags"
+                defaultValue={transaction?.tags?.join(', ')}
+                maxLength={650}
+                placeholder="Ex.: trabalho, viagem"
+              />
+            </Field>
             <Field label="Observações (opcional)">
               <textarea name="notes" defaultValue={transaction?.notes} maxLength={2000} rows={2} />
             </Field>
@@ -288,7 +373,7 @@ export function FinanceForm({
                   Selecione uma categoria
                 </option>
                 {categories
-                  .filter((c) => c.kind === 'expense')
+                  .filter((c) => c.kind === 'expense' && !c.archivedAt)
                   .map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}

@@ -57,3 +57,11 @@ Teste saúde, autenticação e saldos no banco restaurado, comparando contagens 
 ## Publicação do ambiente Codex
 
 A preparação local e o rascunho de ambiente não equivalem a deploy. Após revisão/salvamento das configurações, a publicação do ambiente é feita na interface do produto. Processos não sobrevivem necessariamente ao snapshot: reinicie PostgreSQL e `npm run dev` e valide `/api/health` em tarefas futuras. Use o checkout existente; não crie worktrees automaticamente.
+
+## Atualização desta entrega
+
+Aplique `npm run db:migrate` antes de iniciar a nova API. Foram adicionadas as migrações 002 (consolidação), 003 (planejamento pessoal) e 004 (referências verificadas no commit para exclusão atômica). Não remova volumes nem recrie o banco para atualizar. O teste de migração começa com um banco 001 preenchido, validando a preservação do saldo.
+
+As novas exportações PDF/Excel são geradas no servidor e retornadas como arquivos privados. Conserve as dependências de runtime `pdfkit` e `write-excel-file`. A API não exige serviços pagos para esses formatos. Relatórios têm limite explícito de 10.000 linhas; dados acima desse limite precisam de exportação administrativa planejada, não truncamento.
+
+Excluir uma conta remove os ambientes exclusivos e revoga suas sessões. Ambientes compartilhados sob propriedade do solicitante bloqueiam a exclusão até a transferência de propriedade. Defina antes de produção como esse fluxo se relaciona com retenção obrigatória, backups, mensagens de contato e auditoria de terceiros; apagar dados ativos não remove automaticamente cópias de backup. A implementação local de exclusão não substitui essa política operacional.

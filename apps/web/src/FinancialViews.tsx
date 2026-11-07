@@ -1,4 +1,4 @@
-import type { Summary } from '@clara/shared';
+import type { Account, Category, Summary } from '@clara/shared';
 import { money } from '@clara/shared/money';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -9,6 +9,7 @@ import {
   Plus,
   Wallet,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Area,
@@ -23,6 +24,7 @@ import {
   YAxis,
 } from 'recharts';
 import { api } from './api';
+import { AccountStatement, EntityEditor } from './CoreViews';
 import { useFinance } from './finance-context';
 import { Transactions } from './Transactions';
 import { Button, Empty, ErrorBox } from './ui';
@@ -56,7 +58,7 @@ export function StatCards({ summary }: { summary?: Summary }) {
           value: summary?.expenseCents,
           icon: ArrowUpRight,
           className: 'expense',
-          caption: 'Despesas confirmadas',
+          caption: 'Despesas menos reembolsos',
         },
         {
           title: 'Resultado de caixa',
@@ -180,7 +182,7 @@ export function CategoryChart({ summary }: { summary?: Summary }) {
       <div className="panel-heading">
         <div>
           <h2>Para onde vai?</h2>
-          <p>Suas despesas por categoria</p>
+          <p>Despesas brutas por categoria · antes de reembolsos</p>
         </div>
         <span className="round-icon subtle">
           <ChartNoAxesCombined size={17} />
@@ -208,8 +210,8 @@ export function CategoryChart({ summary }: { summary?: Summary }) {
               </PieChart>
             </ResponsiveContainer>
             <div className="donut-label">
-              <small>Total de despesas</small>
-              <strong>{money(summary!.expenseCents)}</strong>
+              <small>Despesas brutas</small>
+              <strong>{money(summary!.grossExpenseCents)}</strong>
             </div>
           </div>
           <div className="category-legend">
@@ -240,6 +242,41 @@ export function Overview() {
     <>
       <ErrorBox error={summary.error} />
       <StatCards summary={summary.data} />
+      {summary.data && (
+        <section className="panel comparison-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Comparação com o período anterior</h2>
+              <p>
+                {summary.data.previous.from} a {summary.data.previous.to} · reembolsos no período:{' '}
+                {money(summary.data.refundCents)}
+              </p>
+            </div>
+          </div>
+          <div className="comparison-grid">
+            {[
+              ['Entradas', summary.data.change.incomeCents, summary.data.previous.incomeCents],
+              [
+                'Saídas líquidas',
+                summary.data.change.expenseCents,
+                summary.data.previous.expenseCents,
+              ],
+              [
+                'Resultado de caixa',
+                summary.data.change.resultCents,
+                summary.data.previous.resultCents,
+              ],
+            ].map(([label, current, old]) => (
+              <div key={String(label)}>
+                <strong>{label}</strong>
+                <span>Anterior: {money(Number(old))}</span>
+                <span>Variação: {money(Number(current))}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {!accounts.length && (
         <div className="welcome-banner">
           <span className="round-icon mint">
@@ -280,7 +317,10 @@ export function Overview() {
                 </span>
                 <div>
                   <strong>{a.name}</strong>
-                  <small>{accountTypes[a.type]}</small>
+                  <small>
+                    {accountTypes[a.type]}
+                    {a.archivedAt ? ' · Arquivada' : ''}
+                  </small>
                 </div>
                 <strong>{money(a.balanceCents)}</strong>
               </div>
@@ -305,6 +345,8 @@ const accountTypes: Record<string, string> = {
 };
 export function Accounts() {
   const { accounts, categories, open } = useFinance();
+  const [editing, setEditing] = useState<{ account?: Account; category?: Category }>(),
+    [statement, setStatement] = useState<Account>();
   return (
     <>
       <div className="accounts-grid">
@@ -313,9 +355,20 @@ export function Accounts() {
             <span className={`account-icon color-${i % 3}`}>
               <Wallet size={24} />
             </span>
-            <small>{accountTypes[a.type]}</small>
+            <small>
+              {accountTypes[a.type]}
+              {a.archivedAt ? ' · Arquivada' : ''}
+            </small>
             <h2>{a.name}</h2>
             <strong>{money(a.balanceCents)}</strong>
+            <div className="detail-actions">
+              <Button secondary onClick={() => setEditing({ account: a })}>
+                Editar conta
+              </Button>
+              <Button secondary onClick={() => setStatement(a)}>
+                Extrato
+              </Button>
+            </div>
             <Link to={'/app/movimentacoes?accountId=' + a.id}>
               Consultar movimentações <ArrowUpRight size={16} />
             </Link>
@@ -350,7 +403,18 @@ export function Accounts() {
             <span key={c.id}>
               <i className="dot" style={{ background: c.color }} />
               {c.name}
-              <small>{c.kind === 'expense' ? 'Despesa' : 'Receita'}</small>
+              <small>
+                {c.parentId ? 'Subcategoria · ' : ''}
+                {c.kind === 'expense' ? 'Despesa' : 'Receita'}
+                {c.archivedAt ? ' · Arquivada' : ''}
+              </small>
+              <button
+                className="text-button"
+                aria-label={`Editar categoria ${c.name}`}
+                onClick={() => setEditing({ category: c })}
+              >
+                Editar
+              </button>
             </span>
           ))}
           {!categories.length && (
@@ -360,6 +424,10 @@ export function Accounts() {
           )}
         </div>
       </section>
+      {editing && <EntityEditor {...editing} onClose={() => setEditing(undefined)} />}
+      {statement && (
+        <AccountStatement account={statement} onClose={() => setStatement(undefined)} />
+      )}
     </>
   );
 }

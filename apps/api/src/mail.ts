@@ -2,8 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import nodemailer from 'nodemailer';
-import { pool } from './db.js';
 import type { PoolClient } from 'pg';
+import { pool } from './db.js';
 export const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 export async function queueAuthMail(
   userId: string,

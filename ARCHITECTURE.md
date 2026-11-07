@@ -28,6 +28,20 @@ Transferências têm dois lançamentos opostos ligados à mesma operação. Edit
 
 ## Limites atuais
 
-A serialização por ambiente simplifica a consistência; maior escala pode migrar para locks por conta. Rate limiting e sessão operacional dependem de uma única instância da API nesta versão; múltiplas réplicas exigem rate limiter compartilhado. Não há mecanismo de dinheiro real, integração bancária, cotação, LLM, assinatura ou cliente mobile simulado. Arquivos privados, políticas comerciais, notificações e tarefas recorrentes serão módulos futuros, com autorização no mesmo contexto do ambiente.
+A serialização por ambiente simplifica a consistência; maior escala pode migrar para locks por conta. Rate limiting e sessão operacional dependem de uma única instância da API nesta versão; múltiplas réplicas exigem rate limiter compartilhado. Não há mecanismo de dinheiro real, integração bancária, cotação, LLM, assinatura ou cliente mobile simulado. Anexos privados, políticas comerciais, notificações e tarefas recorrentes serão módulos futuros, com autorização no mesmo contexto do ambiente.
 
 O assistente IA, quando implementado, deverá receber somente resultados de ferramentas autorizadas do backend; cálculos continuarão no servidor e operações mutáveis exigirão confirmação. Sem configuração, deverá permanecer indisponível.
+
+## Consolidação e planejamento pessoal
+
+`ledger.ts` centraliza autorização, lock do ambiente, lançamentos e auditoria. `queries.ts` compartilha filtros e ordenação entre consultas e relatórios. `core.ts` trata cadastros, extratos e histórico de metas; `cards.ts` trata compromissos, ciclos, créditos e liquidações; `wealth.ts` trata dívidas e avaliações manuais; `reports.ts` gera PDF/Excel no backend; `privacy.ts` implementa perfil, exportação e exclusão. O frontend usa páginas e formulários próprios, preservando os componentes e tokens visuais Clara.
+
+Arquivar cadastros não altera lançamentos. Novos vínculos a cadastros arquivados são rejeitados; correções de uma movimentação podem manter seu vínculo antigo. Categorias têm um nível de subcategoria, do mesmo tipo, sem ciclos. Uma categoria com filhas ativas não pode ser arquivada antes delas.
+
+Reembolsos exigem despesa manual de origem, mesma categoria, data não anterior e soma até o valor original. O lock serializa reembolsos concorrentes. Despesa com reembolso ativo não pode ser editada/cancelada antes do cancelamento do reembolso. Receitas e reembolsos são separados; a despesa líquida do período pode ser negativa se houver devolução de gasto de período anterior.
+
+Cartões trabalham em regime de caixa. Compra/parcelas não criam lançamentos bancários. Liquidação cria uma única despesa gerenciada e uma trilha de créditos. O cliente confirma o valor esperado para evitar aceitar cálculos que mudaram enquanto o formulário estava aberto. Pagamentos de fatura e dívida não podem ser alterados pelo CRUD genérico: a reabertura/cancelamento de origem coordena registros e caixa atomicamente.
+
+O rate limiter geral permite 600 requisições/minuto por IP, dimensionado para as consultas da interface. Login mantém 10 tentativas/15 minutos, cadastro 10/hora e recuperação 5/hora. A limitação de login é exercitada pelos testes; não foi desativada para a jornada de navegador. Múltiplas réplicas ainda precisam de armazenamento compartilhado.
+
+A exclusão de conta exige senha e confirmação literal. Ambientes exclusivos são removidos na mesma transação; propriedade compartilhada bloqueia a operação antes de apagar qualquer dado. Referências financeiras sem cascata são verificadas no commit para permitir que todas as cascatas do ambiente terminem, mantendo as mesmas chaves estrangeiras. Perfis removidos são anonimizados na auditoria de ambientes de outros titulares. Exportações e respostas de dados usam `Cache-Control: private, no-store` e não incluem hashes de senha ou tokens.

@@ -1,14 +1,18 @@
 import type { Budget, Goal } from '@clara/shared';
 import { money } from '@clara/shared/money';
 import { useQuery } from '@tanstack/react-query';
-import { Download, Plus, ShieldCheck, Target } from 'lucide-react';
-import { api, apiBase } from './api';
+import { Plus, ShieldCheck, Target } from 'lucide-react';
+import { useState } from 'react';
+import { api } from './api';
+import { GoalHistory } from './CoreViews';
 import { dateLabel } from './dates';
+import { DownloadButton } from './Downloads';
 import { useFinance } from './finance-context';
 import { CategoryChart, FlowChart, StatCards, useSummary } from './FinancialViews';
 import { Button, Empty, ErrorBox } from './ui';
 export function Planning() {
   const { wid, month, categories, open } = useFinance();
+  const [historyGoal, setHistoryGoal] = useState<Goal>();
   const budgets = useQuery({
       queryKey: ['finance', wid, 'budgets', month],
       queryFn: () => api<Budget[]>(`/workspaces/${wid}/budgets?month=${month}`),
@@ -28,7 +32,7 @@ export function Planning() {
           <Button
             secondary
             onClick={() => open('budget')}
-            disabled={!categories.some((c) => c.kind === 'expense')}
+            disabled={!categories.some((c) => c.kind === 'expense' && !c.archivedAt)}
           >
             <Plus size={16} /> Definir limite
           </Button>
@@ -47,7 +51,7 @@ export function Planning() {
                 <progress
                   aria-label={`Orçamento de ${b.categoryName}`}
                   max={b.limitCents}
-                  value={Math.min(b.spentCents, b.limitCents)}
+                  value={Math.max(0, Math.min(b.spentCents, b.limitCents))}
                   className={pct >= 100 ? 'over-budget' : ''}
                 />
                 <small className={pct > 100 ? 'red' : 'muted'}>
@@ -98,6 +102,9 @@ export function Planning() {
               <Button secondary onClick={() => open('contribution', undefined, g)}>
                 Registrar progresso <Plus size={15} />
               </Button>
+              <Button secondary onClick={() => setHistoryGoal(g)}>
+                Histórico de aportes
+              </Button>
             </article>
           ))}
         </div>
@@ -112,6 +119,7 @@ export function Planning() {
           dinheiro nas contas.
         </p>
       </section>
+      {historyGoal && <GoalHistory goal={historyGoal} onClose={() => setHistoryGoal(undefined)} />}
     </>
   );
 }
@@ -139,13 +147,23 @@ export function Reports() {
             <h2>Seus dados também são seus</h2>
             <p>Exporte o período selecionado para consultar em uma planilha.</p>
           </div>
-          <a
-            className="button secondary"
-            href={`${apiBase}/workspaces/${wid}/export.csv?from=${from}&to=${to}`}
-            download
-          >
-            <Download size={17} /> Baixar CSV
-          </a>
+          <div className="row-actions">
+            <DownloadButton
+              path={`/workspaces/${wid}/export.csv?from=${from}&to=${to}`}
+              filename="clara-movimentacoes.csv"
+              label="Baixar CSV"
+            />
+            <DownloadButton
+              path={`/workspaces/${wid}/export.pdf?from=${from}&to=${to}`}
+              filename="clara-relatorio.pdf"
+              label="Baixar PDF"
+            />
+            <DownloadButton
+              path={`/workspaces/${wid}/export.xlsx?from=${from}&to=${to}`}
+              filename="clara-relatorio.xlsx"
+              label="Baixar Excel"
+            />
+          </div>
         </div>
       </section>
     </>

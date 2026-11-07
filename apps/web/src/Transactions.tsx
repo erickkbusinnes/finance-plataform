@@ -7,15 +7,16 @@ import {
   ArrowUpRight,
   ChevronLeft,
   ChevronRight,
-  Download,
   Ellipsis,
   Plus,
   Search,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { api, apiBase } from './api';
+import { api } from './api';
+import { optionalCents } from './CoreViews';
 import { dateLabel } from './dates';
+import { DownloadButton } from './Downloads';
 import { useFinance } from './finance-context';
 import { Button, Empty, ErrorBox, Form, Modal } from './ui';
 export function Transactions({ compact = false }: { compact?: boolean }) {
@@ -27,6 +28,10 @@ export function Transactions({ compact = false }: { compact?: boolean }) {
     [kind, setKind] = useState(params.get('kind') || ''),
     [accountId, setAccountId] = useState(params.get('accountId') || ''),
     [categoryId, setCategoryId] = useState(''),
+    [tag, setTag] = useState(''),
+    [min, setMin] = useState(''),
+    [max, setMax] = useState(''),
+    [sort, setSort] = useState('date_desc'),
     [page, setPage] = useState(1),
     [dates, setDates] = useState({ from, to }),
     [detail, setDetail] = useState<Transaction>(),
@@ -39,12 +44,24 @@ export function Transactions({ compact = false }: { compact?: boolean }) {
     setDates({ from, to });
     setPage(1);
   }, [from, to]);
-  useEffect(() => setPage(1), [debounced, kind, accountId, categoryId]);
+  useEffect(() => setPage(1), [debounced, kind, accountId, categoryId, tag, min, max, sort]);
+  let moneyFilters: Record<string, string> = {};
+  let filterError: unknown;
+  try {
+    const lo = optionalCents(min),
+      hi = optionalCents(max);
+    moneyFilters = { ...(lo ? { minCents: lo } : {}), ...(hi ? { maxCents: hi } : {}) };
+  } catch (e) {
+    filterError = e;
+  }
   const query = new URLSearchParams({
     ...dates,
     ...(!compact
       ? {
           search: debounced,
+          tag,
+          sort,
+          ...moneyFilters,
           ...(kind ? { kind } : {}),
           ...(accountId ? { accountId } : {}),
           ...(categoryId ? { categoryId } : {}),
@@ -54,6 +71,7 @@ export function Transactions({ compact = false }: { compact?: boolean }) {
   }).toString();
   const result = useQuery({
     queryKey: ['finance', wid, 'transactions', query, compact],
+    enabled: !filterError,
     queryFn: () =>
       api<{ items: Transaction[]; total: number; page: number }>(
         `/workspaces/${wid}/transactions?${query}`,
@@ -76,13 +94,23 @@ export function Transactions({ compact = false }: { compact?: boolean }) {
             Ver todas <ArrowUpRight size={16} />
           </Link>
         ) : (
-          <a
-            className="button secondary"
-            href={`${apiBase}/workspaces/${wid}/export.csv?${query}`}
-            download
-          >
-            <Download size={16} /> Exportar CSV
-          </a>
+          <div className="row-actions">
+            <DownloadButton
+              path={`/workspaces/${wid}/export.csv?${query}`}
+              filename="clara-movimentacoes.csv"
+              label="Exportar CSV"
+            />
+            <DownloadButton
+              path={`/workspaces/${wid}/export.pdf?${query}`}
+              filename="clara-relatorio.pdf"
+              label="PDF"
+            />
+            <DownloadButton
+              path={`/workspaces/${wid}/export.xlsx?${query}`}
+              filename="clara-relatorio.xlsx"
+              label="Excel"
+            />
+          </div>
         )}
       </div>
       {!compact && (
@@ -101,6 +129,7 @@ export function Transactions({ compact = false }: { compact?: boolean }) {
             <option value="income">Receitas</option>
             <option value="expense">Despesas</option>
             <option value="transfer">Transferências</option>
+            <option value="refund">Reembolsos</option>
           </select>
           <select
             aria-label="Filtrar conta"
@@ -125,6 +154,36 @@ export function Transactions({ compact = false }: { compact?: boolean }) {
                 {c.name}
               </option>
             ))}
+          </select>
+          <input
+            aria-label="Filtrar tag"
+            placeholder="Tag"
+            value={tag}
+            onChange={(e) => setTag(e.target.value)}
+          />
+          <input
+            aria-label="Valor mínimo (R$)"
+            placeholder="Mínimo R$"
+            inputMode="decimal"
+            value={min}
+            onChange={(e) => setMin(e.target.value)}
+          />
+          <input
+            aria-label="Valor máximo (R$)"
+            placeholder="Máximo R$"
+            inputMode="decimal"
+            value={max}
+            onChange={(e) => setMax(e.target.value)}
+          />
+          <select
+            aria-label="Ordenar movimentações"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+          >
+            <option value="date_desc">Mais recentes</option>
+            <option value="date_asc">Mais antigas</option>
+            <option value="amount_desc">Maior valor</option>
+            <option value="amount_asc">Menor valor</option>
           </select>
           <label className="date-filter">
             De{' '}
@@ -152,7 +211,7 @@ export function Transactions({ compact = false }: { compact?: boolean }) {
           </label>
         </div>
       )}
-      <ErrorBox error={result.error} />
+      <ErrorBox error={filterError || result.error} />
       {result.isPending ? (
         <div className="loading" role="status">
           Buscando seus registros…
@@ -187,17 +246,24 @@ export function Transactions({ compact = false }: { compact?: boolean }) {
                       </span>
                       <div>
                         <strong>{t.description}</strong>
+                        {t.tags?.length ? (
+                          <span className="tag-list">{t.tags.join(' · ')}</span>
+                        ) : null}
                         <small>
                           {compact
                             ? t.categoryName ||
                               {
+                                refund: 'Reembolso',
                                 income: 'Receita',
                                 expense: 'Despesa',
                                 transfer: 'Transferência entre contas',
                               }[t.kind]
-                            : { income: 'Receita', expense: 'Despesa', transfer: 'Transferência' }[
-                                t.kind
-                              ]}
+                            : {
+                                refund: 'Reembolso',
+                                income: 'Receita',
+                                expense: 'Despesa',
+                                transfer: 'Transferência',
+                              }[t.kind]}
                         </small>
                       </div>
                     </div>
@@ -215,7 +281,11 @@ export function Transactions({ compact = false }: { compact?: boolean }) {
                   </td>
                   {!compact && <td>{dateLabel(t.date)}</td>}
                   <td className={`align-right value-${t.kind}`}>
-                    {t.kind === 'income' ? '+ ' : t.kind === 'expense' ? '− ' : ''}
+                    {['income', 'refund'].includes(t.kind)
+                      ? '+ '
+                      : t.kind === 'expense'
+                        ? '− '
+                        : ''}
                     {money(t.amountCents)}
                   </td>
                   <td>
@@ -321,7 +391,7 @@ function TransactionDetail({
   onEdit: () => void;
   onCancel: () => void;
 }) {
-  const { wid } = useFinance();
+  const { wid, open } = useFinance();
   const history = useQuery({
     queryKey: ['finance', wid, 'history', t.id],
     queryFn: () => api<any[]>(`/workspaces/${wid}/transactions/${t.id}/history`),
@@ -354,12 +424,30 @@ function TransactionDetail({
           <dd>{t.notes || '—'}</dd>
         </div>
       </dl>
-      <div className="detail-actions">
-        <Button onClick={onEdit}>Editar registro</Button>
-        <Button secondary onClick={onCancel}>
-          Cancelar movimentação
-        </Button>
-      </div>
+      {t.refundOf && <p className="form-description">Reembolso vinculado à despesa {t.refundOf}</p>}
+      {t.sourceType ? (
+        <p className="form-description">
+          Registro gerenciado pelo módulo de origem; edição direta bloqueada.
+        </p>
+      ) : (
+        <div className="detail-actions">
+          <Button onClick={onEdit}>Editar registro</Button>
+          <Button secondary onClick={onCancel}>
+            Cancelar movimentação
+          </Button>
+          {t.kind === 'expense' && (
+            <Button
+              secondary
+              onClick={() => {
+                open('refund', t);
+                onClose();
+              }}
+            >
+              Registrar reembolso
+            </Button>
+          )}
+        </div>
+      )}
       <h3 className="history-title">Histórico de alterações</h3>
       <ErrorBox error={history.error} />
       <ul className="history-list">

@@ -29,6 +29,7 @@ export const accountSchema = z.object({
 export const categorySchema = z.object({
   name: z.string().trim().min(2).max(60),
   kind: z.enum(['income', 'expense']),
+  parentId: z.uuid().nullable().optional(),
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
@@ -37,15 +38,27 @@ export const categorySchema = z.object({
 export const transactionSchema = z
   .object({
     description: z.string().trim().min(2).max(200),
-    kind: z.enum(['income', 'expense', 'transfer']),
+    kind: z.enum(['income', 'expense', 'transfer', 'refund']),
     amountCents: cents,
     date: dateOnly,
     accountId: z.uuid(),
     destinationAccountId: z.uuid().nullable().optional(),
     categoryId: z.uuid().nullable().optional(),
     notes: z.string().max(2000).default(''),
+    tags: z
+      .array(z.string().trim().min(1).max(32))
+      .max(20)
+      .transform((v) => [...new Set(v.map((t) => t.toLowerCase()))])
+      .default([]),
+    refundOf: z.uuid().nullable().optional(),
   })
   .superRefine((v, c) => {
+    if ((v.kind === 'refund') !== !!v.refundOf)
+      c.addIssue({
+        code: 'custom',
+        message: 'Reembolso exige uma despesa de origem.',
+        path: ['refundOf'],
+      });
     if (
       v.kind === 'transfer' &&
       (!v.destinationAccountId || v.destinationAccountId === v.accountId)
@@ -86,12 +99,27 @@ export type Workspace = {
   role: 'owner' | 'admin' | 'finance' | 'viewer';
 };
 export type User = { id: string; name: string; email: string; emailVerified: boolean };
-export type Account = { id: string; name: string; type: string; balanceCents: number };
-export type Category = { id: string; name: string; kind: 'income' | 'expense'; color: string };
+export type Account = {
+  id: string;
+  name: string;
+  type: string;
+  balanceCents: number;
+  archivedAt: string | null;
+  version: number;
+};
+export type Category = {
+  id: string;
+  name: string;
+  kind: 'income' | 'expense';
+  color: string;
+  parentId: string | null;
+  archivedAt: string | null;
+  version: number;
+};
 export type Transaction = {
   id: string;
   description: string;
-  kind: 'income' | 'expense' | 'transfer';
+  kind: 'income' | 'expense' | 'transfer' | 'refund';
   amountCents: number;
   date: string;
   accountId: string;
@@ -102,8 +130,21 @@ export type Transaction = {
   categoryName: string | null;
   notes: string;
   version: number;
+  tags: string[];
+  refundOf: string | null;
+  sourceType: string | null;
 };
 export type Summary = {
+  change: { incomeCents: number; expenseCents: number; resultCents: number };
+  grossExpenseCents: number;
+  refundCents: number;
+  previous: {
+    from: string;
+    to: string;
+    incomeCents: number;
+    expenseCents: number;
+    resultCents: number;
+  };
   balanceCents: number;
   incomeCents: number;
   expenseCents: number;
@@ -127,3 +168,44 @@ export type Goal = {
   dueDate: string | null;
 };
 export { money, parseMoney } from './money.js';
+
+export const accountUpdateSchema = accountSchema
+  .pick({ name: true, type: true })
+  .extend({ archived: z.boolean(), version: z.number().int().positive() });
+export const categoryUpdateSchema = categorySchema.extend({
+  archived: z.boolean(),
+  version: z.number().int().positive(),
+});
+export const transactionFilters = z
+  .object({
+    from: dateOnly,
+    to: dateOnly,
+    search: z.string().max(100).default(''),
+    kind: z.enum(['income', 'expense', 'transfer', 'refund']).optional(),
+    accountId: z.uuid().optional(),
+    categoryId: z.uuid().optional(),
+    tag: z.string().max(32).optional(),
+    minCents: z.coerce.number().int().min(0).max(1_000_000_000_000).optional(),
+    maxCents: z.coerce.number().int().min(0).max(1_000_000_000_000).optional(),
+    sort: z.enum(['date_desc', 'date_asc', 'amount_desc', 'amount_asc']).default('date_desc'),
+    page: z.coerce.number().int().min(1).max(100000).default(1),
+  })
+  .refine((v) => v.from <= v.to, 'Período inválido')
+  .refine(
+    (v) => v.minCents === undefined || v.maxCents === undefined || v.minCents <= v.maxCents,
+    'Faixa de valores inválida',
+  );
+export type Statement = {
+  openingCents: number;
+  closingCents: number;
+  total: number;
+  page: number;
+  items: {
+    id: string;
+    description: string;
+    kind: string;
+    date: string;
+    amountCents: number;
+    balanceCents: number;
+  }[];
+};

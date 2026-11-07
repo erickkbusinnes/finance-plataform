@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/web/tsconfig.json",
     "test": "npm run test -w @clara/api",
     "test:e2e": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:build": "node --env-file-if-exists=.env scripts/check-build.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

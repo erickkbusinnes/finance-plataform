@@ -14,7 +14,7 @@ PostgreSQL 17; todos os IDs são UUID, datas de competência são `date` (sem co
 - `contact_messages`: mensagens do site, sem rota pública de leitura.
 - `schema_migrations`: migrações aplicadas.
 
-A estrutura de cartões, faturas, pagamentos parciais, clientes e assinaturas não existe ainda; será introduzida nas respectivas fases.
+Cartões e planejamento pessoal estão descritos abaixo. Contas a pagar/receber empresariais, clientes e assinaturas ainda não têm tabelas nesta versão.
 
 ## Precisão
 
@@ -22,11 +22,11 @@ Valores de movimentações são `bigint` de centavos; não se usa `float` para p
 
 ## Saldo e resultado
 
-Saldo = soma dos lançamentos de operações não canceladas. Receita é positiva; despesa é negativa; transferência debita origem e credita destino. Saldo inicial é uma operação `opening` com lançamento assinado e não participa de receita/despesa. Não há campo de saldo alterado sem trilha.
+Saldo = soma dos lançamentos de operações não canceladas. Receita e reembolso são positivos; despesa é negativa; transferência debita origem e credita destino. Saldo inicial é uma operação `opening` com lançamento assinado e não participa de receita/despesa. Não há campo de saldo alterado sem trilha.
 
 A soma de transferência deve ser zero: a API grava os dois lançamentos em uma única transação. O banco verifica chaves estrangeiras, limite de valores, unicidade e contas distintas. A restrição de exatamente dois lançamentos por transferência é garantida pelo serviço transacional (não por trigger); não permita gravação direta por outros serviços.
 
-Saldos negativos são permitidos e aparecem explicitamente. Datas futuras são confirmadas, não previstas. Resultado de caixa = receitas − despesas do período. Não representa lucro contábil. O saldo consolidado considera todas as datas; as métricas do período respeitam os filtros. Não há integrações com bancos ou ordens de pagamento.
+Saldos negativos são permitidos e aparecem explicitamente. Datas futuras são confirmadas, não previstas. Resultado de caixa = receitas − (despesas brutas − reembolsos) do período. Não representa lucro contábil. O saldo consolidado considera todas as datas; as métricas do período respeitam os filtros. Não há integrações com bancos ou ordens de pagamento.
 
 ## Concorrência e auditoria
 
@@ -35,3 +35,27 @@ Escritas financeiras bloqueiam a linha do ambiente. `Idempotency-Key` UUID é ob
 ## Migrações
 
 `npm run db:migrate` executa SQL ainda não aplicado em ordem, com advisory lock e transação. Repita o comando com segurança. Não altere migrações publicadas; adicione um novo arquivo. Não há rollback destrutivo automático. Para mudanças em produção, faça backup e planeje uma migração corretiva compatível. Restauração está em DEPLOYMENT.md.
+
+## Migração 002 — consolidação
+
+Contas e categorias ganham `version` e `archived_at`; categorias recebem `parent_id` com referência composta no ambiente. Movimentações recebem `tags`, `refund_of` e `source_type`. O vínculo de reembolso é obrigatório somente para `kind=refund`. Categorias de reembolsos seguem a despesa de origem. Orçamentos de categoria principal incluem suas subcategorias e os reembolsos do mês. Auditoria admite ator removido/anônimo, preservando registros de terceiros.
+
+O extrato soma lançamentos anteriores ao início para calcular a abertura e usa uma janela SQL ordenada por data, criação e ID antes da paginação. A consulta inteira usa leitura repetível. Saldo progressivo não é recalculado apenas com as 25 linhas da página.
+
+## Migração 003 — cartões, dívidas e patrimônio
+
+- `credit_cards`: limite, fechamento, vencimento, versão e arquivamento. Não armazena número de cartão ou credenciais.
+- `card_purchases` e `card_installments`: compra original e parcelas inteiras que somam exatamente seu total. Chave de idempotência por ambiente.
+- `card_statements`: competência por vencimento, fechamento, liquidação e vínculo à despesa bancária. Uma fatura por cartão/vencimento.
+- `card_refunds`: créditos vinculados à compra, limitados ao valor original. O ciclo respeita as liquidações existentes.
+- `card_credit_entries`: histórico assinado dos créditos gerados/consumidos na compensação de faturas. O crédito disponível é calculado pela soma, sem saldo alterado isoladamente.
+- `debts` e `debt_payments`: principal original, taxa mensal em pontos-base (informativa), vencimento, amortização, juros pagos, vínculo ao caixa e cancelamento preservado.
+- `holdings` e `holding_valuations`: bem/investimento, quantidade `numeric(24,8)`, valor aplicado em centavos e avaliações totais datadas. A avaliação mais recente por data/criação/ID define o valor atual. Avaliações retroativas não sobrescrevem avaliações posteriores.
+
+A posição líquida de cartão é o total de parcelas abertas menos estornos abertos e créditos já compensados. Pode ser negativa quando existe crédito a favor do titular. O limite disponível considera essa posição. A liquidação integral registra apenas a saída que sobra depois de aplicar créditos. Não há rotativo, cálculo automático de juros ou pagamento parcial de fatura.
+
+Patrimônio estimado = contas não substituídas por investimento vinculado + avaliações manuais − principal das dívidas pendente − posição líquida dos cartões. Vincular um investimento exige uma conta de investimento do próprio ambiente e vínculo único. Alterar o tipo de uma conta já vinculada é bloqueado. Nenhuma avaliação ou cadastro de dívida/bem gera dinheiro na conta.
+
+## Migração 004 — exclusão atômica
+
+Referências financeiras `NO ACTION` entre tabelas dependentes tornam-se `DEFERRABLE INITIALLY DEFERRED`. Elas continuam sendo verificadas ao confirmar a transação. Isso permite remover um ambiente completo sem que a ordem interna das cascatas deixe referências temporárias impedindo a exclusão. Os testes cobrem conta preenchida, reembolsos, categorias com filhas, metas, faturas, créditos, dívidas e investimentos, e verificam que dados de terceiros permanecem intactos.

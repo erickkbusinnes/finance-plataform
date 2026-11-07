@@ -4,8 +4,10 @@ import {
   ArrowLeftRight,
   ArrowUpRight,
   Building2,
+  CreditCard as CardIcon,
   ChartNoAxesCombined,
   ChevronDown,
+  Landmark,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -21,6 +23,7 @@ import {
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError, api, post } from './api';
+import { Cards } from './Cards';
 import { FinanceContext } from './finance-context';
 import type { ModalType } from './FinanceForms';
 import { FinanceForm, today } from './FinanceForms';
@@ -29,10 +32,13 @@ import { Planning, Reports } from './Planning';
 import { Preferences } from './Preferences';
 import { Transactions } from './Transactions';
 import { Brand, Button, Empty, ErrorBox, Field, Form } from './ui';
+import { Wealth } from './Wealth';
 const links = [
   { path: '', label: 'Visão geral', icon: LayoutDashboard },
   { path: 'movimentacoes', label: 'Movimentações', icon: ArrowLeftRight },
   { path: 'contas', label: 'Contas e carteiras', icon: Wallet },
+  { path: 'cartoes', label: 'Cartões de crédito', icon: CardIcon },
+  { path: 'patrimonio', label: 'Patrimônio e dívidas', icon: Landmark },
   { path: 'planejamento', label: 'Planejamento', icon: Target },
   { path: 'relatorios', label: 'Relatórios', icon: ChartNoAxesCombined },
   { path: 'configuracoes', label: 'Configurações', icon: Settings },
@@ -53,6 +59,7 @@ export function DashboardApp() {
   });
   const [selected, setSelected] = useState(localStorage.getItem('clara-workspace') || ''),
     [month, setMonth] = useState(today().slice(0, 7)),
+    [spanMonths, setSpanMonths] = useState(1),
     [modal, setModal] = useState<ModalType>(null),
     [transaction, setTransaction] = useState<Transaction>(),
     [goal, setGoal] = useState<Goal>(),
@@ -65,7 +72,11 @@ export function DashboardApp() {
     location = useLocation();
   const workspace = workspaces.data?.find((w) => w.id === selected) || workspaces.data?.[0];
   const wid = workspace?.id || '';
-  const { from, to } = monthRange(month);
+  const range = monthRange(month);
+  const anchor = new Date(month + '-01T12:00:00Z');
+  anchor.setUTCMonth(anchor.getUTCMonth() - (spanMonths - 1));
+  const from = anchor.toISOString().slice(0, 10),
+    to = range.to;
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('clara-theme', theme);
@@ -326,6 +337,8 @@ export function DashboardApp() {
                         contas: 'Seu dinheiro, em cada lugar.',
                         planejamento: 'Pequenos passos. Planos maiores.',
                         relatorios: 'Transforme seus registros em perspectiva.',
+                        cartoes: 'Compras e faturas, sem perder o controle.',
+                        patrimonio: 'Uma visão do que você tem e do que deve.',
                         configuracoes: 'Seu espaço, do seu jeito.',
                       }[page]}
                 </p>
@@ -344,7 +357,19 @@ export function DashboardApp() {
                     />
                   </label>
                 )}
-                {page !== 'configuracoes' && (
+                {['', 'relatorios'].includes(page) && (
+                  <select
+                    className="period-picker"
+                    aria-label="Intervalo do dashboard"
+                    value={spanMonths}
+                    onChange={(e) => setSpanMonths(Number(e.target.value))}
+                  >
+                    <option value={1}>1 mês</option>
+                    <option value={3}>3 meses</option>
+                    <option value={6}>6 meses</option>
+                  </select>
+                )}
+                {!['configuracoes', 'cartoes', 'patrimonio'].includes(page) && (
                   <Button
                     onClick={() =>
                       open(
@@ -356,7 +381,9 @@ export function DashboardApp() {
                       )
                     }
                     disabled={
-                      page !== 'contas' && page !== 'planejamento' && !accounts.data?.length
+                      page !== 'contas' &&
+                      page !== 'planejamento' &&
+                      !accounts.data?.some((a) => !a.archivedAt)
                     }
                   >
                     <Plus size={17} />
@@ -376,6 +403,10 @@ export function DashboardApp() {
               <Transactions />
             ) : page === 'contas' ? (
               <Accounts />
+            ) : page === 'cartoes' ? (
+              <Cards />
+            ) : page === 'patrimonio' ? (
+              <Wealth />
             ) : page === 'planejamento' ? (
               <Planning />
             ) : page === 'relatorios' ? (

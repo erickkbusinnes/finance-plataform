@@ -6,5 +6,5 @@ export default defineConfig({
   target: 'node22',
   sourcemap: true,
   clean: true,
-  noExternal: ['@clara/shared'],
+  noExternal: [/^@clara\/shared/],
 });

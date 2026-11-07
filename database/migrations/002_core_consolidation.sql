@@ -1,0 +1,12 @@
+ALTER TABLE financial_accounts ADD COLUMN archived_at timestamptz, ADD COLUMN version integer NOT NULL DEFAULT 1;
+ALTER TABLE categories ADD COLUMN archived_at timestamptz, ADD COLUMN version integer NOT NULL DEFAULT 1, ADD COLUMN parent_id uuid;
+ALTER TABLE categories ADD CONSTRAINT categories_parent_fk FOREIGN KEY(workspace_id,parent_id) REFERENCES categories(workspace_id,id), ADD CONSTRAINT category_not_self CHECK(parent_id IS NULL OR parent_id<>id);
+ALTER TABLE transactions DROP CONSTRAINT transactions_kind_check;
+ALTER TABLE transactions ADD CONSTRAINT transactions_kind_check CHECK(kind IN ('opening','income','expense','transfer','refund'));
+ALTER TABLE transactions ADD COLUMN refund_of uuid, ADD COLUMN tags text[] NOT NULL DEFAULT '{}', ADD COLUMN source_type text CHECK(source_type IN ('card_payment','debt_payment'));
+ALTER TABLE transactions ADD CONSTRAINT refund_source_fk FOREIGN KEY(workspace_id,refund_of) REFERENCES transactions(workspace_id,id), ADD CONSTRAINT refund_source_required CHECK((kind='refund' AND refund_of IS NOT NULL) OR (kind<>'refund' AND refund_of IS NULL)), ADD CONSTRAINT transaction_tags_limit CHECK(cardinality(tags)<=20);
+CREATE INDEX transactions_refunds ON transactions(workspace_id,refund_of) WHERE voided_at IS NULL;
+CREATE INDEX transactions_tags ON transactions USING gin(tags);
+ALTER TABLE audit_logs ALTER COLUMN actor_id DROP NOT NULL;
+ALTER TABLE audit_logs DROP CONSTRAINT audit_logs_actor_id_fkey;
+ALTER TABLE audit_logs ADD CONSTRAINT audit_actor_fk FOREIGN KEY(actor_id) REFERENCES users(id) ON DELETE SET NULL;

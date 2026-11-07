@@ -298,7 +298,7 @@ const pageContent: Record<string, { title: string; intro: string }> = {
   '/funcionalidades': {
     title: 'O essencial, bem organizado.',
     intro:
-      'Recursos disponíveis nesta versão: contas e carteiras com saldo inicial, categorias, receitas, despesas, transferências vinculadas, filtros, histórico, gráficos, exportação CSV, orçamentos e acompanhamento de metas.',
+      'Recursos disponíveis nesta versão: contas e carteiras com saldo inicial, categorias, receitas, despesas, transferências vinculadas, filtros, histórico, gráficos, exportação CSV/PDF/Excel, orçamentos, histórico de metas, cartões parcelados, dívidas e patrimônio com avaliações manuais.',
   },
   '/solucoes': {
     title: 'Um lugar para cada realidade.',
@@ -318,7 +318,7 @@ const pageContent: Record<string, { title: string; intro: string }> = {
   '/privacidade': {
     title: 'Seus dados merecem cuidado.',
     intro:
-      'Esta versão armazena nome, e-mail, sessões e os registros financeiros que você informa. Usamos esses dados para autenticar seu acesso e calcular os indicadores. Senhas são protegidas por hash e os ambientes têm controle de acesso no servidor. Não armazenamos credenciais bancárias. Você pode exportar movimentações em CSV. A exclusão autônoma da conta e a política definitiva de retenção ainda estão em desenvolvimento. Antes de uso comercial, serão publicados identificação do controlador, canal de atendimento LGPD e termos definitivos. Não utilize dados financeiros sensíveis em uma instalação de demonstração.',
+      'Esta versão armazena nome, e-mail, sessões e os registros financeiros que você informa. Usamos esses dados para autenticar seu acesso e calcular os indicadores. Senhas são protegidas por hash e os ambientes têm controle de acesso no servidor. Não armazenamos credenciais bancárias. Em Configurações, você pode exportar seus dados em JSON e excluir a conta mediante senha e confirmação. A exclusão remove seus ambientes exclusivos; ambientes compartilhados de sua propriedade precisam ter a titularidade transferida antes. Registros de terceiros mantêm sua auditoria com ator anonimizado. Mensagens de contato têm finalidade separada. A política definitiva de retenção ainda será estabelecida. Antes de uso comercial, serão publicados identificação do controlador, canal de atendimento LGPD e termos definitivos. Não utilize dados financeiros sensíveis em uma instalação de demonstração.',
   },
   '/termos': {
     title: 'Transparência desde o começo.',

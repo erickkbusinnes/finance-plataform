@@ -1,4 +1,3 @@
-import type { TransactionInput } from '@clara/shared';
 import {
   accountSchema,
   budgetSchema,
@@ -6,106 +5,33 @@ import {
   cents,
   dateOnly,
   goalSchema,
+  transactionFilters,
   transactionSchema,
   workspaceSchema,
 } from '@clara/shared';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { randomUUID } from 'node:crypto';
-import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import { authenticate } from './auth.js';
+import { validateParent } from './core.js';
 import { atomic, integer, pool } from './db.js';
 import { check } from './errors.js';
-const ws = z.object({ wid: z.uuid() });
-const entity = ws.extend({ id: z.uuid() });
+import {
+  audit,
+  authorize,
+  entity,
+  entries,
+  lock,
+  moneyRows,
+  protectManaged,
+  validateReferences,
+  ws,
+} from './ledger.js';
+import { transactionOrder, transactionSelect, transactionWhere as where } from './queries.js';
 const period = z
   .object({ from: dateOnly, to: dateOnly })
   .refine((v) => v.from <= v.to, 'Período inválido');
-async function authorize(req: FastifyRequest, write = false) {
-  const wid = (req.params as { wid: string }).wid;
-  const member = (
-    await pool.query('SELECT role FROM workspace_members WHERE workspace_id=$1 AND user_id=$2', [
-      wid,
-      req.userId,
-    ])
-  ).rows[0];
-  check(member, 404, 'Ambiente não encontrado.');
-  if (write)
-    check(
-      ['owner', 'admin', 'finance'].includes(member.role),
-      403,
-      'Você não tem permissão para alterar este ambiente.',
-    );
-  return wid;
-}
-async function audit(
-  c: PoolClient,
-  wid: string,
-  actor: string,
-  action: string,
-  id: string,
-  before: unknown,
-  after: unknown,
-) {
-  await c.query(
-    'INSERT INTO audit_logs(id,workspace_id,actor_id,action,entity_id,before_data,after_data) VALUES($1,$2,$3,$4,$5,$6,$7)',
-    [
-      randomUUID(),
-      wid,
-      actor,
-      action,
-      id,
-      before ? JSON.stringify(before) : null,
-      after ? JSON.stringify(after) : null,
-    ],
-  );
-}
-async function lock(c: PoolClient, wid: string) {
-  await c.query('SELECT id FROM workspaces WHERE id=$1 FOR UPDATE', [wid]);
-}
-async function validateReferences(c: PoolClient, wid: string, b: TransactionInput) {
-  const accounts = [b.accountId, ...(b.destinationAccountId ? [b.destinationAccountId] : [])];
-  check(
-    (
-      await c.query(
-        'SELECT id FROM financial_accounts WHERE workspace_id=$1 AND id=ANY($2::uuid[])',
-        [wid, accounts],
-      )
-    ).rowCount === accounts.length,
-    400,
-    'Conta inválida para este ambiente.',
-  );
-  if (b.categoryId)
-    check(
-      (
-        await c.query('SELECT id FROM categories WHERE workspace_id=$1 AND id=$2 AND kind=$3', [
-          wid,
-          b.categoryId,
-          b.kind,
-        ])
-      ).rowCount,
-      400,
-      'Categoria incompatível com a movimentação.',
-    );
-}
-async function entries(c: PoolClient, wid: string, id: string, b: TransactionInput) {
-  await c.query(
-    'INSERT INTO transaction_entries(id,workspace_id,transaction_id,account_id,amount_cents) VALUES($1,$2,$3,$4,$5)',
-    [randomUUID(), wid, id, b.accountId, b.kind === 'income' ? b.amountCents : -b.amountCents],
-  );
-  if (b.kind === 'transfer')
-    await c.query(
-      'INSERT INTO transaction_entries(id,workspace_id,transaction_id,account_id,amount_cents) VALUES($1,$2,$3,$4,$5)',
-      [randomUUID(), wid, id, b.destinationAccountId, b.amountCents],
-    );
-}
-const transactionSelect = `SELECT t.id,t.description,t.kind,t.amount_cents AS "amountCents",t.date,t.account_id AS "accountId",a.name AS "accountName",t.destination_account_id AS "destinationAccountId",d.name AS "destinationName",t.category_id AS "categoryId",c.name AS "categoryName",t.notes,t.version FROM transactions t JOIN financial_accounts a ON a.id=t.account_id LEFT JOIN financial_accounts d ON d.id=t.destination_account_id LEFT JOIN categories c ON c.id=t.category_id`;
-const moneyRows = (rows: any[], keys: string[]) =>
-  rows.map((r) => {
-    for (const k of keys) r[k] = integer(r[k]);
-    return r;
-  });
 export async function financeRoutes(base: FastifyInstance) {
   const app = base.withTypeProvider<ZodTypeProvider>();
   app.addHook('preHandler', authenticate);
@@ -140,7 +66,7 @@ export async function financeRoutes(base: FastifyInstance) {
     return moneyRows(
       (
         await pool.query(
-          `SELECT a.id,a.name,a.type,COALESCE(sum(e.amount_cents) FILTER(WHERE t.voided_at IS NULL),0) AS "balanceCents" FROM financial_accounts a LEFT JOIN transaction_entries e ON e.account_id=a.id LEFT JOIN transactions t ON t.id=e.transaction_id WHERE a.workspace_id=$1 GROUP BY a.id ORDER BY a.created_at`,
+          `SELECT a.id,a.name,a.type,a.version,a.archived_at AS "archivedAt",COALESCE(sum(e.amount_cents) FILTER(WHERE t.voided_at IS NULL),0) AS "balanceCents" FROM financial_accounts a LEFT JOIN transaction_entries e ON e.account_id=a.id LEFT JOIN transactions t ON t.id=e.transaction_id WHERE a.workspace_id=$1 GROUP BY a.id ORDER BY a.created_at`,
           [wid],
         )
       ).rows,
@@ -181,7 +107,7 @@ export async function financeRoutes(base: FastifyInstance) {
     async (req) =>
       (
         await pool.query(
-          'SELECT id,name,kind,color FROM categories WHERE workspace_id=$1 ORDER BY name',
+          'SELECT id,name,kind,color,version,parent_id AS "parentId",archived_at AS "archivedAt" FROM categories WHERE workspace_id=$1 ORDER BY name',
           [await authorize(req)],
         )
       ).rows,
@@ -193,36 +119,18 @@ export async function financeRoutes(base: FastifyInstance) {
       const wid = await authorize(req, true),
         id = randomUUID();
       await atomic(async (c) => {
+        await lock(c, wid);
+        await validateParent(c, wid, id, req.body.parentId || null, req.body.kind);
         await c.query(
-          'INSERT INTO categories(id,workspace_id,name,kind,color) VALUES($1,$2,$3,$4,$5)',
-          [id, wid, req.body.name, req.body.kind, req.body.color],
+          'INSERT INTO categories(id,workspace_id,name,kind,color,parent_id) VALUES($1,$2,$3,$4,$5,$6)',
+          [id, wid, req.body.name, req.body.kind, req.body.color, req.body.parentId || null],
         );
         await audit(c, wid, req.userId, 'category.create', id, null, req.body);
       });
       return reply.code(201).send({ id });
     },
   );
-  const filters = period.safeExtend({
-    search: z.string().max(100).default(''),
-    kind: z.enum(['income', 'expense', 'transfer']).optional(),
-    accountId: z.uuid().optional(),
-    categoryId: z.uuid().optional(),
-    page: z.coerce.number().int().min(1).max(100000).default(1),
-  });
-  function where(wid: string, b: z.infer<typeof filters>) {
-    return {
-      sql: `t.workspace_id=$1 AND t.voided_at IS NULL AND t.kind<>'opening' AND t.date BETWEEN $2 AND $3 AND (t.description ILIKE $4) AND ($5::text IS NULL OR t.kind=$5) AND ($6::uuid IS NULL OR t.account_id=$6 OR t.destination_account_id=$6) AND ($7::uuid IS NULL OR t.category_id=$7)`,
-      values: [
-        wid,
-        b.from,
-        b.to,
-        `%${b.search.replace(/[\\%_]/g, '\\$&')}%`,
-        b.kind || null,
-        b.accountId || null,
-        b.categoryId || null,
-      ],
-    };
-  }
+  const filters = transactionFilters;
   app.get(
     '/workspaces/:wid/transactions',
     { schema: { params: ws, querystring: filters } },
@@ -230,7 +138,7 @@ export async function financeRoutes(base: FastifyInstance) {
       const w = where(await authorize(req), req.query);
       const rows = (
         await pool.query(
-          `${transactionSelect} WHERE ${w.sql} ORDER BY t.date DESC,t.created_at DESC LIMIT 25 OFFSET $8`,
+          `${transactionSelect} WHERE ${w.sql} ORDER BY ${transactionOrder[req.query.sort]} LIMIT 25 OFFSET $11`,
           [...w.values, (req.query.page - 1) * 25],
         )
       ).rows;
@@ -248,7 +156,7 @@ export async function financeRoutes(base: FastifyInstance) {
       const w = where(await authorize(req), req.query);
       const rows = (
         await pool.query(
-          `${transactionSelect} WHERE ${w.sql} ORDER BY t.date DESC LIMIT 10001`,
+          `${transactionSelect} WHERE ${w.sql} ORDER BY ${transactionOrder[req.query.sort]} LIMIT 10001`,
           w.values,
         )
       ).rows;
@@ -260,7 +168,7 @@ export async function financeRoutes(base: FastifyInstance) {
           .replace(/"/g, '""') +
         '"';
       const csv = [
-        'Data;Descrição;Tipo;Valor em centavos;Conta;Destino;Categoria',
+        'Data;Descrição;Tipo;Valor em centavos;Conta;Destino;Categoria;Tags;Observações;Reembolso de;Origem do registro',
         ...rows.map((r) =>
           [
             r.date,
@@ -270,6 +178,10 @@ export async function financeRoutes(base: FastifyInstance) {
             r.accountName,
             r.destinationName,
             r.categoryName,
+            r.tags.join(', '),
+            r.notes,
+            r.refundOf,
+            r.sourceType,
           ]
             .map(escape)
             .join(';'),
@@ -310,7 +222,9 @@ export async function financeRoutes(base: FastifyInstance) {
               prior.account_id === b.accountId &&
               (prior.destination_account_id ?? null) === (b.destinationAccountId ?? null) &&
               (prior.category_id ?? null) === (b.categoryId ?? null) &&
-              prior.notes === b.notes,
+              prior.notes === b.notes &&
+              JSON.stringify(prior.tags) === JSON.stringify(b.tags) &&
+              (prior.refund_of || null) === (b.refundOf || null),
             409,
             'Chave já usada com outros dados.',
           );
@@ -320,7 +234,7 @@ export async function financeRoutes(base: FastifyInstance) {
         const id = randomUUID(),
           b = req.body;
         await c.query(
-          'INSERT INTO transactions(id,workspace_id,description,kind,amount_cents,date,account_id,destination_account_id,category_id,notes,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+          'INSERT INTO transactions(id,workspace_id,description,kind,amount_cents,date,account_id,destination_account_id,category_id,notes,idempotency_key,tags,refund_of) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
           [
             id,
             wid,
@@ -333,6 +247,8 @@ export async function financeRoutes(base: FastifyInstance) {
             b.categoryId || null,
             b.notes,
             req.headers['idempotency-key'],
+            b.tags,
+            b.refundOf || null,
           ],
         );
         await entries(c, wid, id, b);
@@ -366,10 +282,11 @@ export async function financeRoutes(base: FastifyInstance) {
           409,
           'Esta movimentação foi alterada. Atualize e tente novamente.',
         );
-        await validateReferences(c, wid, req.body);
+        await protectManaged(c, wid, before);
+        await validateReferences(c, wid, req.body, before);
         const b = req.body;
         await c.query(
-          'UPDATE transactions SET description=$3,kind=$4,amount_cents=$5,date=$6,account_id=$7,destination_account_id=$8,category_id=$9,notes=$10,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2',
+          'UPDATE transactions SET description=$3,kind=$4,amount_cents=$5,date=$6,account_id=$7,destination_account_id=$8,category_id=$9,notes=$10,tags=$11,refund_of=$12,version=version+1,updated_at=now() WHERE workspace_id=$1 AND id=$2',
           [
             wid,
             req.params.id,
@@ -381,6 +298,8 @@ export async function financeRoutes(base: FastifyInstance) {
             b.destinationAccountId || null,
             b.categoryId || null,
             b.notes,
+            b.tags,
+            b.refundOf || null,
           ],
         );
         await c.query('DELETE FROM transaction_entries WHERE transaction_id=$1', [req.params.id]);
@@ -409,6 +328,7 @@ export async function financeRoutes(base: FastifyInstance) {
           409,
           'Registro alterado. Atualize antes de cancelar.',
         );
+        await protectManaged(c, wid, before);
         await c.query(
           'UPDATE transactions SET voided_at=now(),updated_at=now(),version=version+1 WHERE id=$1',
           [req.params.id],
@@ -442,7 +362,7 @@ export async function financeRoutes(base: FastifyInstance) {
         await c.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY');
         const totals = (
           await c.query(
-            `SELECT COALESCE(sum(amount_cents) FILTER(WHERE kind='income'),0) AS income,COALESCE(sum(amount_cents) FILTER(WHERE kind='expense'),0) AS expense FROM transactions WHERE workspace_id=$1 AND voided_at IS NULL AND date BETWEEN $2 AND $3`,
+            `SELECT COALESCE(sum(amount_cents) FILTER(WHERE kind='income'),0) AS income,COALESCE(sum(amount_cents) FILTER(WHERE kind='expense'),0)-COALESCE(sum(amount_cents) FILTER(WHERE kind='refund'),0) AS expense,COALESCE(sum(amount_cents) FILTER(WHERE kind='expense'),0) AS gross,COALESCE(sum(amount_cents) FILTER(WHERE kind='refund'),0) AS refunds FROM transactions WHERE workspace_id=$1 AND voided_at IS NULL AND date BETWEEN $2 AND $3`,
             [wid, b.from, b.to],
           )
         ).rows[0];
@@ -457,7 +377,7 @@ export async function financeRoutes(base: FastifyInstance) {
         const monthly = moneyRows(
           (
             await c.query(
-              `SELECT to_char(date,'YYYY-MM') AS month,COALESCE(sum(amount_cents) FILTER(WHERE kind='income'),0) AS "incomeCents",COALESCE(sum(amount_cents) FILTER(WHERE kind='expense'),0) AS "expenseCents" FROM transactions WHERE workspace_id=$1 AND voided_at IS NULL AND kind IN ('income','expense') AND date BETWEEN $2 AND $3 GROUP BY 1 ORDER BY 1`,
+              `SELECT to_char(date,'YYYY-MM') AS month,COALESCE(sum(amount_cents) FILTER(WHERE kind='income'),0) AS "incomeCents",COALESCE(sum(amount_cents) FILTER(WHERE kind='expense'),0)-COALESCE(sum(amount_cents) FILTER(WHERE kind='refund'),0) AS "expenseCents" FROM transactions WHERE workspace_id=$1 AND voided_at IS NULL AND kind IN ('income','expense','refund') AND date BETWEEN $2 AND $3 GROUP BY 1 ORDER BY 1`,
               [wid, b.from, b.to],
             )
           ).rows,
@@ -472,11 +392,51 @@ export async function financeRoutes(base: FastifyInstance) {
           ).rows,
           ['amountCents'],
         );
+        const fromDate = new Date(b.from + 'T12:00:00Z'),
+          toDate = new Date(b.to + 'T12:00:00Z');
+        const lastDay = new Date(
+          Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth() + 1, 0),
+        ).getUTCDate();
+        const days = Math.round((+toDate - +fromDate) / 86400000) + 1;
+        const previousTo = new Date(+fromDate - 86400000);
+        const previousFrom =
+          fromDate.getUTCDate() === 1 &&
+          toDate.getUTCDate() === lastDay &&
+          b.from.slice(0, 7) === b.to.slice(0, 7)
+            ? new Date(Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth() - 1, 1, 12))
+            : new Date(+fromDate - days * 86400000);
+        const pf = previousFrom.toISOString().slice(0, 10),
+          pt = previousTo.toISOString().slice(0, 10);
+        const old = (
+          await c.query(
+            "SELECT COALESCE(sum(amount_cents) FILTER(WHERE kind='income'),0) AS income,COALESCE(sum(amount_cents) FILTER(WHERE kind='expense'),0)-COALESCE(sum(amount_cents) FILTER(WHERE kind='refund'),0) AS expense FROM transactions WHERE workspace_id=$1 AND voided_at IS NULL AND date BETWEEN $2 AND $3",
+            [wid, pf, pt],
+          )
+        ).rows[0];
         return {
           balanceCents: balance,
+          grossExpenseCents: integer(totals.gross),
+          refundCents: integer(totals.refunds),
+          previous: {
+            from: pf,
+            to: pt,
+            incomeCents: integer(old.income),
+            expenseCents: integer(old.expense),
+            resultCents: integer(BigInt(old.income) - BigInt(old.expense)),
+          },
           incomeCents: integer(totals.income),
           expenseCents: integer(totals.expense),
-          resultCents: integer(totals.income) - integer(totals.expense),
+          resultCents: integer(BigInt(totals.income) - BigInt(totals.expense)),
+          change: {
+            incomeCents: integer(BigInt(totals.income) - BigInt(old.income)),
+            expenseCents: integer(BigInt(totals.expense) - BigInt(old.expense)),
+            resultCents: integer(
+              BigInt(totals.income) -
+                BigInt(totals.expense) -
+                BigInt(old.income) +
+                BigInt(old.expense),
+            ),
+          },
           monthly,
           categories,
         };
@@ -491,7 +451,7 @@ export async function financeRoutes(base: FastifyInstance) {
       return moneyRows(
         (
           await pool.query(
-            `SELECT b.id,b.category_id AS "categoryId",c.name AS "categoryName",to_char(b.month,'YYYY-MM') AS month,b.limit_cents AS "limitCents",COALESCE((SELECT sum(t.amount_cents) FROM transactions t WHERE t.workspace_id=b.workspace_id AND t.category_id=b.category_id AND t.kind='expense' AND t.voided_at IS NULL AND t.date>=b.month AND t.date<b.month+interval '1 month'),0) AS "spentCents" FROM budgets b JOIN categories c ON c.id=b.category_id WHERE b.workspace_id=$1 AND b.month=$2 ORDER BY c.name`,
+            `SELECT b.id,b.category_id AS "categoryId",c.name AS "categoryName",to_char(b.month,'YYYY-MM') AS month,b.limit_cents AS "limitCents",COALESCE((SELECT sum(CASE WHEN t.kind='refund' THEN -t.amount_cents ELSE t.amount_cents END) FROM transactions t WHERE t.workspace_id=b.workspace_id AND (t.category_id=b.category_id OR t.category_id IN (SELECT id FROM categories WHERE workspace_id=b.workspace_id AND parent_id=b.category_id)) AND t.kind IN ('expense','refund') AND t.voided_at IS NULL AND t.date>=b.month AND t.date<b.month+interval '1 month'),0) AS "spentCents" FROM budgets b JOIN categories c ON c.id=b.category_id WHERE b.workspace_id=$1 AND b.month=$2 ORDER BY c.name`,
             [wid, req.query.month + '-01'],
           )
         ).rows,
@@ -508,7 +468,7 @@ export async function financeRoutes(base: FastifyInstance) {
         check(
           (
             await c.query(
-              "SELECT 1 FROM categories WHERE workspace_id=$1 AND id=$2 AND kind='expense'",
+              "SELECT 1 FROM categories WHERE workspace_id=$1 AND id=$2 AND kind='expense' AND archived_at IS NULL",
               [wid, req.body.categoryId],
             )
           ).rowCount,

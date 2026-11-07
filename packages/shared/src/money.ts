@@ -1,5 +1,19 @@
+const wholeBRL = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
 export function money(value: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
+  if (!Number.isSafeInteger(value)) throw new Error('Valor monetário fora da precisão suportada');
+  const amount = BigInt(value),
+    absolute = amount < 0n ? -amount : amount;
+  return (
+    (amount < 0n ? '-' : '') +
+    wholeBRL.format(absolute / 100n) +
+    ',' +
+    (absolute % 100n).toString().padStart(2, '0')
+  );
 }
 // Decimal strings are converted exactly to integer cents. No float multiplication.
 export function parseMoney(input: string): number {

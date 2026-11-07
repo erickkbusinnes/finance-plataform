@@ -11,12 +11,17 @@ import {
   validatorCompiler,
 } from 'fastify-type-provider-zod';
 import { randomUUID } from 'node:crypto';
-import { docsPage } from './docs.js';
 import { z } from 'zod';
 import { authRoutes } from './auth.js';
+import { cardRoutes } from './cards.js';
+import { coreRoutes } from './core.js';
 import { pool } from './db.js';
+import { docsPage } from './docs.js';
 import { check } from './errors.js';
 import { financeRoutes } from './finance.js';
+import { privacyRoutes } from './privacy.js';
+import { reportRoutes } from './reports.js';
+import { wealthRoutes } from './wealth.js';
 export async function buildApp(options: { logger?: boolean; rateLimit?: boolean } = {}) {
   if (process.env.NODE_ENV === 'production') {
     check(!!process.env.APP_ORIGIN?.startsWith('https://'), 500, 'APP_ORIGIN deve usar HTTPS.');
@@ -48,7 +53,7 @@ export async function buildApp(options: { logger?: boolean; rateLimit?: boolean 
   });
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(rateLimit, {
-    max: options.rateLimit === false ? 100000 : 120,
+    max: options.rateLimit === false ? 100000 : 600,
     timeWindow: '1 minute',
   });
   await app.register(swagger, {
@@ -81,6 +86,11 @@ export async function buildApp(options: { logger?: boolean; rateLimit?: boolean 
         );
     }
   });
+  app.addHook('onSend', async (req, reply, payload) => {
+    if (req.url.startsWith('/api/') && !req.url.startsWith('/api/docs'))
+      reply.header('Cache-Control', 'private, no-store');
+    return payload;
+  });
   app.setErrorHandler((error: any, _req, reply) => {
     if (error.validation)
       return reply.code(400).send({
@@ -104,6 +114,11 @@ export async function buildApp(options: { logger?: boolean; rateLimit?: boolean 
       });
       await api.register(authRoutes);
       await api.register(financeRoutes);
+      await api.register(coreRoutes);
+      await api.register(cardRoutes);
+      await api.register(wealthRoutes);
+      await api.register(reportRoutes);
+      await api.register(privacyRoutes);
       const typed = api.withTypeProvider<ZodTypeProvider>();
       typed.post(
         '/contact',
