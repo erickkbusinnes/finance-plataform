@@ -1,6 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { atomic, pool } from './db.js';
 export async function migrate() {
   const dir = path.resolve(
@@ -20,7 +20,7 @@ export async function migrate() {
     }
   });
 }
-if (process.argv[1]?.endsWith('migrate.ts')) {
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   await migrate();
   console.log('Migrações aplicadas.');
   await pool.end();

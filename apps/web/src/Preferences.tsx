@@ -5,7 +5,10 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, apiBase, post } from './api';
 import { Button, ErrorBox, Field, Form, Modal, Status } from './ui';
+import { useRuntimeConfig } from './runtime';
 export function Preferences({ user }: { user: User }) {
+  const runtime = useRuntimeConfig();
+  const mailUnavailable = runtime.data?.mailEnabled === false;
   const qc = useQueryClient();
   const sessions = useQuery({
     queryKey: ['sessions'],
@@ -48,7 +51,11 @@ export function Preferences({ user }: { user: User }) {
           }
           onSuccess={() => {
             void qc.invalidateQueries({ queryKey: ['me'] });
-            setNotice('Perfil atualizado. Se o e-mail mudou, confirme o novo endereço.');
+            setNotice(
+              mailUnavailable
+                ? 'Perfil atualizado.'
+                : 'Perfil atualizado. Se o e-mail mudou, confirme o novo endereço.',
+            );
           }}
         >
           <Field label="Seu nome">
@@ -66,16 +73,15 @@ export function Preferences({ user }: { user: User }) {
             />
           </Field>
         </Form>
-        {!user.emailVerified && (
+        {!user.emailVerified && !mailUnavailable && (
           <Form
             submit="Reenviar confirmação"
             onSave={() => post('/auth/resend-verification', {})}
-            onSuccess={() =>
-              setNotice(
-                'Confirmação solicitada. Em desenvolvimento, consulte .local/mail. Nenhum e-mail externo é enviado sem SMTP configurado.',
-              )
-            }
+            onSuccess={() => setNotice('Solicitação de confirmação registrada.')}
           />
+        )}
+        {mailUnavailable && (
+          <p className="muted">Confirmação por e-mail indisponível nesta demonstração.</p>
         )}
         <Status>{notice}</Status>
       </section>

@@ -1,6 +1,6 @@
 # Relatório de andamento — Clara / finance-plataform
 
-Data: 7 de novembro de 2026.
+Data: 10 de novembro de 2026.
 
 Repositório: `erickkbusinnes/finance-plataform`.
 
@@ -9,6 +9,16 @@ Repositório: `erickkbusinnes/finance-plataform`.
 A primeira base foi revisada, testada, versionada no commit `48a1e31` e enviada ao GitHub na branch `feat/clara-core-and-planning`. A continuação foi desenvolvida nessa mesma branch, preservando o código e a identidade visual Clara. O SHA e o resultado do envio da atualização são informados no encerramento da tarefa; `git log -2 --oneline` e `git status` permitem conferência local.
 
 O sistema tem frontend, API, PostgreSQL, migrações e persistência reais. O produto completo ainda está em desenvolvimento: não houve deploy comercial, integração bancária, ativação de IA ou cobrança.
+
+### Acesso online — atualização de 10/11
+
+O erro `ERR_CONNECTION_REFUSED` no computador do usuário ocorreu ao abrir `localhost:5173`: esse endereço aponta para o próprio computador, enquanto os processos estavam no ambiente de nuvem. O site local foi iniciado e a navegação para cadastro/login foi verificada. Não existe URL pública dessa execução.
+
+Foi preparado um pacote de hospedagem com `render.yaml` (Node + PostgreSQL declarados Free), comando `npm run start:cloud`, migrações compiladas/repetíveis e entrega segura do build React pela própria API. O modo explícito de demonstração mantém cookies Secure e origem HTTPS, informa para usar dados de teste e não simula envio de e-mail: confirmação e recuperação ficam indisponíveis e nenhum token/outbox é criado nesse modo. Produção normal continua exigindo SMTP.
+
+A conta de hospedagem ainda não foi criada/conectada. Não há credencial de hospedagem nem ferramenta de deploy autenticada nesta sessão. O acesso HTTP ao domínio Render também foi recusado pela política de rede atual; não houve provisionamento externo ou verificação dos planos no provedor. O próximo passo é o titular criar a conta e aplicar o Blueprint da branch `feat/clara-core-and-planning`, conferindo custo zero no painel conforme [DEPLOYMENT.md](../DEPLOYMENT.md). Nenhum serviço pago foi contratado. A URL exata só existirá após a implantação.
+
+Validação desta atualização: 49 testes de API/regras e 8 cenários de navegador passaram, assim como typecheck, build e o teste do início de hospedagem compilado. Consulte [VALIDATION.md](VALIDATION.md) para o recorte e os limites.
 
 ## O que está implementado
 

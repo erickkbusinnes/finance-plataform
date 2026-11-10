@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { atomic, pool } from './db.js';
 import { AppError, check } from './errors.js';
 import { hash, queueAuthMail } from './mail.js';
+import { requireMail } from './runtime.js';
 declare module 'fastify' {
   interface FastifyRequest {
     userId: string;
@@ -135,6 +136,7 @@ export async function authRoutes(base: FastifyInstance) {
       config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
     },
     async (req) => {
+      requireMail();
       const u = (await pool.query('SELECT id,email FROM users WHERE email=$1', [req.body.email]))
         .rows[0];
       if (u) await queueAuthMail(u.id, u.email, 'reset');
@@ -145,6 +147,7 @@ export async function authRoutes(base: FastifyInstance) {
     '/auth/resend-verification',
     { preHandler: authenticate, config: { rateLimit: { max: 3, timeWindow: '1 hour' } } },
     async (req) => {
+      requireMail();
       const u = (await pool.query('SELECT * FROM users WHERE id=$1', [req.userId])).rows[0];
       if (!u.email_verified) await queueAuthMail(u.id, u.email, 'verify');
       return { ok: true };
@@ -154,6 +157,7 @@ export async function authRoutes(base: FastifyInstance) {
     '/auth/verify-email',
     { schema: { body: z.object({ token: z.string().length(64) }) } },
     async (req) => {
+      requireMail();
       await atomic(async (c) => {
         const { rows } = await c.query(
           "DELETE FROM auth_tokens WHERE token_hash=$1 AND purpose='verify' AND expires_at>now() RETURNING user_id",
@@ -173,6 +177,7 @@ export async function authRoutes(base: FastifyInstance) {
       },
     },
     async (req) => {
+      requireMail();
       const pw = await argon2.hash(req.body.password, {
         type: argon2.argon2id,
         memoryCost: 19456,

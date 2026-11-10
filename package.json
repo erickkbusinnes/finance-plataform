@@ -17,7 +17,8 @@
     "test": "npm run test -w @clara/api",
     "test:e2e": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test",
     "format": "prettier --write .",
-    "test:build": "node --env-file-if-exists=.env scripts/check-build.mjs"
+    "test:build": "node --env-file-if-exists=.env scripts/check-build.mjs",
+    "start:cloud": "node scripts/start-cloud.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

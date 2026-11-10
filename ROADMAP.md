@@ -68,6 +68,7 @@ A web responsiva está disponível; não equivale a aplicativo nativo.
 
 ## SaaS e preparação para produção, fase 7
 
+- [x] Pacote de demonstração: site/API na mesma origem, migrações compiladas, modo sem e-mail explícito e Blueprint com recursos declarados Free. Provisionamento externo ainda pendente.
 - [ ] Domínio, hospedagem, PostgreSQL de produção e HTTPS.
 - [ ] SMTP real, DNS do remetente e teste de entrega.
 - [ ] Identificação jurídica, canal LGPD e termos/retenção definitivos.

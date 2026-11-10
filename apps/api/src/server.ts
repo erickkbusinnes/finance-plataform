@@ -1,7 +1,14 @@
 import { buildApp } from './app.js';
 import { pool } from './db.js';
 import { deliverMail } from './mail.js';
-const app = await buildApp({ logger: true });
+import { fileURLToPath } from 'node:url';
+const app = await buildApp({
+  logger: true,
+  webRoot:
+    process.env.SERVE_WEB === 'true'
+      ? fileURLToPath(new URL('../../web/dist/', import.meta.url))
+      : undefined,
+});
 await app.listen({ port: Number(process.env.PORT || 3001), host: '0.0.0.0' });
 const flushMail = () =>
   deliverMail().catch(() =>

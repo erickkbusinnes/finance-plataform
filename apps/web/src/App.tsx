@@ -1,12 +1,20 @@
 import { lazy, Suspense } from 'react';
 import { Link, Route, Routes } from 'react-router-dom';
 import { AuthPage, Landing, PublicPage, Seo } from './Public';
+import { useRuntimeConfig } from './runtime';
 const DashboardApp = lazy(() => import('./Dashboard').then((m) => ({ default: m.DashboardApp })));
 
 export function App() {
+  const runtime = useRuntimeConfig();
   return (
     <>
       <Seo />
+      {runtime.data?.preview && (
+        <aside className="preview-notice" aria-label="Ambiente de demonstração">
+          Demonstração Clara · Use dados de teste. Confirmação por e-mail e recuperação de senha
+          indisponíveis.
+        </aside>
+      )}
       <Routes>
         <Route path="/" element={<Landing />} />
         {['funcionalidades', 'solucoes', 'precos', 'sobre', 'contato', 'termos', 'privacidade'].map(

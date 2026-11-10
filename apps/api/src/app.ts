@@ -17,20 +17,17 @@ import { cardRoutes } from './cards.js';
 import { coreRoutes } from './core.js';
 import { pool } from './db.js';
 import { docsPage } from './docs.js';
-import { check } from './errors.js';
+import { AppError, check } from './errors.js';
 import { financeRoutes } from './finance.js';
 import { privacyRoutes } from './privacy.js';
 import { reportRoutes } from './reports.js';
 import { wealthRoutes } from './wealth.js';
-export async function buildApp(options: { logger?: boolean; rateLimit?: boolean } = {}) {
-  if (process.env.NODE_ENV === 'production') {
-    check(!!process.env.APP_ORIGIN?.startsWith('https://'), 500, 'APP_ORIGIN deve usar HTTPS.');
-    check(
-      process.env.MAIL_MODE !== 'local' && !!process.env.SMTP_URL && !!process.env.MAIL_FROM,
-      500,
-      'Configure SMTP e remetente antes de iniciar em produção.',
-    );
-  }
+import { isPreview, mailEnabled, validateRuntime } from './runtime.js';
+import { serveWeb } from './web.js';
+export async function buildApp(
+  options: { logger?: boolean; rateLimit?: boolean; webRoot?: string } = {},
+) {
+  validateRuntime();
   const app = Fastify({
     logger: options.logger
       ? {
@@ -99,7 +96,10 @@ export async function buildApp(options: { logger?: boolean; rateLimit?: boolean 
       });
     if (error.code === '23505')
       return reply.code(409).send({ message: 'Já existe um registro com estes dados.' });
-    if (error.statusCode && error.statusCode < 500)
+    if (
+      (error.statusCode && error.statusCode < 500) ||
+      (error instanceof AppError && error.statusCode === 503)
+    )
       return reply.code(error.statusCode).send({ message: error.message });
     app.log.error({ code: error.code || 'INTERNAL', requestId: _req.id }, 'Falha interna');
     return reply
@@ -112,6 +112,7 @@ export async function buildApp(options: { logger?: boolean; rateLimit?: boolean 
         await pool.query('SELECT 1');
         return { status: 'ok' };
       });
+      api.get('/config', async () => ({ preview: isPreview(), mailEnabled: mailEnabled() }));
       await api.register(authRoutes);
       await api.register(financeRoutes);
       await api.register(coreRoutes);
@@ -144,5 +145,6 @@ export async function buildApp(options: { logger?: boolean; rateLimit?: boolean 
     },
     { prefix: '/api' },
   );
+  if (options.webRoot) await serveWeb(app, options.webRoot);
   return app;
 }

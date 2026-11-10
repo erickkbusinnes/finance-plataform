@@ -36,3 +36,14 @@ Executada em 7 de novembro de 2026, com Node 24.22.1, npm 11.9, PostgreSQL 17.6 
 Os testes utilizam schemas isolados em `clara_test`, removidos depois das execuções. Capturas e traces ficam em `test-results/`, ignorados pelo Git. Não foram adicionados dados financeiros fictícios a contas de usuário no banco de desenvolvimento.
 
 Não houve deploy externo, envio SMTP real, integração financeira ou serviço pago. A execução remota do workflow de CI e restauração em uma nova tarefa de nuvem não foram confirmadas. As verificações automatizadas descrevem o recorte testado; não equivalem a certificação integral de segurança/acessibilidade.
+
+## Preparação de acesso online — 10/11/2026
+
+- `npm run typecheck`: passou.
+- `npm test`: **49 testes passaram**, sem falhas ou ignorados, incluindo os 47 anteriores. Novos testes verificam HTTPS obrigatório, recusa de produção normal sem SMTP, modo de demonstração explícito, rotas SPA e tipos/cache/CSP dos assets. Tentativas de leitura de `.env`, caminhos codificados, symlinks, mapas de fontes e assets/rotas API inexistentes são rejeitadas sem entregar HTML ou arquivos privados.
+- `npm run build`: passou; gera também `apps/api/dist/migrate.js`.
+- `npm run test:build`: passou usando o comando real `scripts/start-cloud.mjs`, com `NODE_ENV=production`, origem HTTPS de fixture e PostgreSQL em schema isolado. Confirma quatro migrações, repetição da CLI compilada, site/API na mesma porta, assets JS, cookie Secure, acesso autenticado, configuração pública sem segredos, indisponibilidade de confirmação/recuperação e ausência de tokens/outbox no modo sem e-mail. Mantém verificações de parcelas, PDF, Excel e OpenAPI. O teste HTTP local não verifica terminação TLS externa.
+- `npm run test:e2e`: **8 cenários passaram**, sem falhas ou ignorados. O novo cenário usa a resposta de configuração de demonstração para conferir aviso, ausência da promessa de recuperação por e-mail, acessibilidade e largura móvel. A proteção correspondente do backend é exercitada pelo teste do build. O primeiro ensaio revelou contraste insuficiente no pequeno texto da arte da tela de acesso; a cor foi corrigida e a execução completa passou.
+- Não foram instaladas dependências novas nem alterados dados de contas no banco de desenvolvimento. Dados de testes continuam isolados e removidos após cada execução.
+
+`render.yaml` foi preparado com planos declarados Free. A conta do titular, a aceitação do Blueprint, a disponibilidade/expiração dos planos, o build no provedor, o domínio atribuído e o HTTPS externo **ainda não foram validados**. Não houve publicação externa nem contratação paga. A política de rede desta sessão recusou acesso HTTP ao Render e não existe credencial de hospedagem conectada; a publicação deve prosseguir pelo painel da conta do titular, conforme `DEPLOYMENT.md`.

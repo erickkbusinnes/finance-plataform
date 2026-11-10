@@ -43,7 +43,11 @@ O Compose publica o banco somente em `127.0.0.1:5432` e usa um volume persistent
 
 Com `MAIL_MODE=local`, a API grava mensagens pessoais de confirmação e recuperação em **`.local/mail/`** na raiz. O processamento acontece na inicialização e a cada 10 segundos. Leia o arquivo correspondente ao seu e-mail e abra o link no navegador; ele expira em uma hora e só pode ser utilizado uma vez. A pasta é ignorada pelo Git e contém links sensíveis. Nenhum e-mail externo é enviado nesse modo.
 
-Para envio real, configure SMTP e remetente de domínio próprio no backend. Produção recusa `MAIL_MODE=local`, falta de SMTP ou origem sem HTTPS. Não coloque segredos em variáveis `VITE_*`.
+Para envio real, configure SMTP e remetente de domínio próprio no backend. Produção normal recusa `MAIL_MODE=local`, falta de SMTP ou origem sem HTTPS. A demonstração explícita usa e-mail desabilitado e informa a limitação. Não coloque segredos em variáveis `VITE_*`.
+
+### Abrir por um link online
+
+O [guia de publicação](DEPLOYMENT.md#link-público-para-demonstração-no-render) explica como criar uma conta no Render e usar o `render.yaml` da branch `feat/clara-core-and-planning`. Site, API e PostgreSQL ficam conectados; `npm run start:cloud` aplica as migrações e serve o build em uma única origem HTTPS. Os dois recursos estão declarados como Free, sujeitos à disponibilidade e aos limites atuais do provedor. Ainda é necessário criar/aplicar a hospedagem para obter a URL pública. A demonstração aceita contas e dados de teste, sem confirmação/recuperação por e-mail. Não substitui a preparação para produção do roadmap.
 
 ## Verificação
 
@@ -55,15 +59,15 @@ npm run test:build
 npm run test:e2e
 ```
 
-`npm test` executa 47 testes de regras/integração com o PostgreSQL, incluindo concorrência, referências cruzadas, permissões, reversão e autenticação. `TEST_DATABASE_URL` precisa apontar a um banco cujo nome termina em `_test`; cada execução cria e remove seu próprio schema. O Compose cria `clara_test` na primeira inicialização. Para volumes preexistentes sem ele:
+`npm test` executa 49 testes de regras/integração com o PostgreSQL, incluindo concorrência, referências cruzadas, permissões, reversão, autenticação e entrega do site compilado sem expor arquivos privados. `TEST_DATABASE_URL` precisa apontar a um banco cujo nome termina em `_test`; cada execução cria e remove seu próprio schema. O Compose cria `clara_test` na primeira inicialização. Para volumes preexistentes sem ele:
 
 ```bash
 docker compose exec -T postgres psql -U clara -d postgres -c 'CREATE DATABASE clara_test;'
 ```
 
-`npm run test:build` exercita o artefato compilado da API na porta **3003**, com PostgreSQL isolado, autenticação, parcelas e geração PDF/Excel. Requer build anterior.
+`npm run test:build` exercita o início de hospedagem e os artefatos compilados na porta **3003**: migração compilada repetível, site/API na mesma origem, configuração de demonstração, cookie Secure, PostgreSQL isolado, autenticação, parcelas e PDF/Excel. Requer build anterior; a URL HTTPS de fixture não representa um deploy ou ensaio de TLS externo.
 
-E2E inicia API na porta **3002** e web em **5174**, em um schema isolado, sem tocar as contas do ambiente de desenvolvimento. Usa Chromium de `/usr/bin/chromium` quando disponível; em outras máquinas execute `npx playwright install chromium`. Executa sete cenários: jornada original, consolidação/privacidade, cartões/dívidas/patrimônio, experiência móvel, site público e acessibilidade. Testa também exportação de arquivos, reabertura de faturas e cancelamento de pagamentos. Capturas e traces ficam em `test-results/` e não entram no Git. Não rode dois E2E simultaneamente nas mesmas portas.
+E2E inicia API na porta **3002** e web em **5174**, em um schema isolado, sem tocar as contas do ambiente de desenvolvimento. Usa Chromium de `/usr/bin/chromium` quando disponível; em outras máquinas execute `npx playwright install chromium`. Executa oito cenários: jornada original, consolidação/privacidade, cartões/dívidas/patrimônio, experiência móvel, site público, acessibilidade e apresentação dos limites da demonstração. Testa também exportação de arquivos, reabertura de faturas e cancelamento de pagamentos. Capturas e traces ficam em `test-results/` e não entram no Git. Não rode dois E2E simultaneamente nas mesmas portas.
 
 ### Verificação manual
 

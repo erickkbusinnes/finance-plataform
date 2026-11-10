@@ -765,7 +765,7 @@ em {
 }
 .auth-art > small {
   font-size: 10px;
-  color: #648a76;
+  color: #8fae9f;
 }
 .auth-art:after {
   content: '';
@@ -3418,6 +3418,23 @@ th {
   color: #536958;
 }
 .planning-card h3,
+.preview-notice {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  padding: 10px 20px;
+  background: #143b2e;
+  color: #fff;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.5;
+}
+body:has(.preview-notice) {
+  padding-bottom: 64px;
+}
+
 .account-card h2,
 .panel-heading h2 {
   overflow-wrap: anywhere;

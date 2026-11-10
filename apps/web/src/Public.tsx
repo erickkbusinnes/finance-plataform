@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { post } from './api';
 import { Brand, Field, Form, Status } from './ui';
+import { useRuntimeConfig } from './runtime';
 const nav = [
   ['Funcionalidades', '/funcionalidades'],
   ['Para você e sua empresa', '/solucoes'],
@@ -397,6 +398,8 @@ function Contact() {
   );
 }
 export function AuthPage({ mode }: { mode: 'login' | 'register' | 'forgot' | 'verify' | 'reset' }) {
+  const runtime = useRuntimeConfig();
+  const mailUnavailable = runtime.data?.mailEnabled === false;
   const navigate = useNavigate(),
     qc = useQueryClient(),
     [params] = useSearchParams(),
@@ -448,7 +451,12 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' | 'forgot' | 've
               ? 'Comece a organizar suas finanças. Sem cartão de crédito.'
               : 'Um lugar para enxergar seu dinheiro com tranquilidade.'}
           </p>
-          {done ? (
+          {mailUnavailable && ['forgot', 'verify', 'reset'].includes(mode) ? (
+            <Status>
+              Envio de e-mail indisponível nesta demonstração. Guarde sua senha para acessar a conta
+              de teste.
+            </Status>
+          ) : done ? (
             <>
               <Status>
                 {mode === 'forgot'
@@ -546,9 +554,11 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' | 'forgot' | 've
           )}
           {mode === 'login' && (
             <>
-              <Link to="/recuperar-senha" className="forgot-link">
-                Esqueci minha senha
-              </Link>
+              {!mailUnavailable && (
+                <Link to="/recuperar-senha" className="forgot-link">
+                  Esqueci minha senha
+                </Link>
+              )}
               <div className="auth-divider" />
               <p className="auth-switch">
                 Ainda não tem uma conta?{' '}

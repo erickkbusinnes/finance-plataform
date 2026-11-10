@@ -4,6 +4,7 @@ import path from 'node:path';
 import nodemailer from 'nodemailer';
 import type { PoolClient } from 'pg';
 import { pool } from './db.js';
+import { mailEnabled } from './runtime.js';
 export const hash = (s: string) => createHash('sha256').update(s).digest('hex');
 export async function queueAuthMail(
   userId: string,
@@ -11,6 +12,7 @@ export async function queueAuthMail(
   purpose: 'verify' | 'reset',
   client?: PoolClient,
 ) {
+  if (!mailEnabled()) return;
   const token = randomBytes(32).toString('hex');
   // Recoverable outbound message and hashed one-use credential are committed together.
   const c = client || (await pool.connect());
@@ -33,6 +35,7 @@ export async function queueAuthMail(
   }
 }
 export async function deliverMail() {
+  if (!mailEnabled()) return;
   const local = process.env.MAIL_MODE === 'local' && process.env.NODE_ENV !== 'production';
   if (!local && !process.env.SMTP_URL) return;
   const transport = local ? null : nodemailer.createTransport(process.env.SMTP_URL!);
