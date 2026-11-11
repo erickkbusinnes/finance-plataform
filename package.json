@@ -18,7 +18,9 @@
     "test:e2e": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test",
     "format": "prettier --write .",
     "test:build": "node --env-file-if-exists=.env scripts/check-build.mjs",
-    "start:cloud": "node scripts/start-cloud.mjs"
+    "start:cloud": "node scripts/start-cloud.mjs",
+    "preview:html": "npm run build && node --env-file-if-exists=.env --import tsx scripts/export-preview.ts && node scripts/check-preview.mjs",
+    "test:html": "node scripts/check-preview.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

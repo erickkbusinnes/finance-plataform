@@ -1,6 +1,6 @@
 # Relatório de andamento — Clara / finance-plataform
 
-Data: 10 de novembro de 2026.
+Data: 11 de novembro de 2026.
 
 Repositório: `erickkbusinnes/finance-plataform`.
 
@@ -19,6 +19,12 @@ Foi preparado um pacote de hospedagem com `render.yaml` (Node + PostgreSQL decla
 A conta de hospedagem ainda não foi criada/conectada. Não há credencial de hospedagem nem ferramenta de deploy autenticada nesta sessão. O acesso HTTP ao domínio Render também foi recusado pela política de rede atual; não houve provisionamento externo ou verificação dos planos no provedor. O próximo passo é o titular criar a conta e aplicar o Blueprint da branch `feat/clara-core-and-planning`, conferindo custo zero no painel conforme [DEPLOYMENT.md](../DEPLOYMENT.md). Nenhum serviço pago foi contratado. A URL exata só existirá após a implantação.
 
 Validação desta atualização: 49 testes de API/regras e 8 cenários de navegador passaram, assim como typecheck, build e o teste do início de hospedagem compilado. Consulte [VALIDATION.md](VALIDATION.md) para o recorte e os limites.
+
+### Visualização por HTML — atualização de 11/11
+
+A pedido do usuário, foi criado `preview/Clara.html`, um arquivo independente com 39 telas reais para navegação e consulta sem servidor. O perfil e as finanças são exemplos fictícios gerados através da API em schema temporário do banco de testes, apagado ao final. O sistema existente e os dados de desenvolvimento foram preservados. O HTML contém estilos, ícones, gráficos, páginas, formulários e históricos; não incorpora credenciais ou dependências externas. Inputs ficam bloqueados e operações de gravação/exportação exibem aviso de que exigem a versão conectada.
+
+Isso permite inspecionar as telas no computador, mas não equivale a hospedagem ou à aplicação financeira operacional. A publicação em `chatgpt.site` continua pendente: o comando de prévia do ambiente retornou `preview relay unavailable`. O teste do HTML usa Chromium com rede desabilitada e carregamento do conteúdo; a política do navegador gerenciado impede testar navegação `file://` neste ambiente.
 
 ## O que está implementado
 

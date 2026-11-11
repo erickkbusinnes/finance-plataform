@@ -49,6 +49,10 @@ Para envio real, configure SMTP e remetente de domínio próprio no backend. Pro
 
 O [guia de publicação](DEPLOYMENT.md#link-público-para-demonstração-no-render) explica como criar uma conta no Render e usar o `render.yaml` da branch `feat/clara-core-and-planning`. Site, API e PostgreSQL ficam conectados; `npm run start:cloud` aplica as migrações e serve o build em uma única origem HTTPS. Os dois recursos estão declarados como Free, sujeitos à disponibilidade e aos limites atuais do provedor. Ainda é necessário criar/aplicar a hospedagem para obter a URL pública. A demonstração aceita contas e dados de teste, sem confirmação/recuperação por e-mail. Não substitui a preparação para produção do roadmap.
 
+### Visualizar pelo arquivo HTML
+
+Baixe [preview/Clara.html](preview/Clara.html) para consultar 39 telas em um único arquivo, sem servidor ou internet. Preserva a aparência real do Clara e usa exemplos fictícios. Formulários, autenticação, gravação e exportações precisam da aplicação conectada; o HTML é para navegação e consulta. Veja [instruções e limites](preview/README.md). `npm run preview:html` regenera a captura em schema de teste isolado; `npm run test:html` verifica o arquivo pronto.
+
 ## Verificação
 
 ```bash

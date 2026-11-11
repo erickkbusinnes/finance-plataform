@@ -47,3 +47,11 @@ Não houve deploy externo, envio SMTP real, integração financeira ou serviço 
 - Não foram instaladas dependências novas nem alterados dados de contas no banco de desenvolvimento. Dados de testes continuam isolados e removidos após cada execução.
 
 `render.yaml` foi preparado com planos declarados Free. A conta do titular, a aceitação do Blueprint, a disponibilidade/expiração dos planos, o build no provedor, o domínio atribuído e o HTTPS externo **ainda não foram validados**. Não houve publicação externa nem contratação paga. A política de rede desta sessão recusou acesso HTTP ao Render e não existe credencial de hospedagem conectada; a publicação deve prosseguir pelo painel da conta do titular, conforme `DEPLOYMENT.md`.
+
+## Arquivo HTML para consulta — 11/11/2026
+
+- `scripts/export-preview.ts`: gerou `preview/Clara.html` com **39 telas reais**, incluindo páginas públicas, acesso, painel, cartões, patrimônio, planejamento, relatórios, perfil, formulários e históricos. Os gráficos e valores dos exemplos foram calculados pela API existente. Exemplos foram inseridos e apagados somente em schema temporário do banco de testes.
+- `npm run test:html`: passou. O conteúdo do arquivo foi carregado no Chromium com rede desabilitada, após cópia para uma pasta diferente com espaços no nome. O teste percorreu as 39 telas, validou navegação e diálogos, inputs bloqueados, avisos de consulta, tema, gráficos com dimensões positivas e dados presentes, menu móvel e ausência de transbordamento nas páginas avaliadas em 390 px.
+- Nenhuma chamada HTTP/API foi iniciada pelo HTML. Não há CSS, JavaScript, fontes ou imagens dependentes de arquivos externos. O artefato não contém senhas, hashes de credenciais, cookies de sessão ou URLs PostgreSQL.
+- O navegador gerenciado retornou `ERR_BLOCKED_BY_ADMINISTRATOR` para `file://`. O teste usou `setContent` para validar o HTML sem contornar essa política; não representa abertura por duplo clique já verificada no computador do usuário.
+- A revisão visual confirmou gráficos e aparência do dashboard. A exportação HTML não alterou frontend/backend de produção nem dados existentes. As operações de autenticação, gravação e exportação continuam dependendo da aplicação conectada. Este arquivo permite inspecionar telas; não conclui os módulos pendentes do produto.
